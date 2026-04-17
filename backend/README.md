@@ -44,7 +44,11 @@ Versioned SQL lives in [../supabase/migrations/](../supabase/migrations/). Apply
    uv run python scripts/apply_migrations.py
    ```
 
-   Requires `DATABASE_URL` in `.env` (direct connection URI). If you get **connection timeout**, your network may block outbound **5432** — use the Supabase **SQL Editor** (option 3) or a **Session pooler** URI (often IPv4) from the dashboard.
+   Requires `DATABASE_URL` in `.env`. If **direct** `db.<ref>.supabase.co:5432` times out, use the **Transaction pooler** from the dashboard (**Connect** → **Transaction pooler**): host like `aws-0-<region>.pooler.supabase.com`, port **6543**, user **`postgres.<project-ref>`** (not `postgres`), password = database password, `?sslmode=require`. Example:
+
+   `postgresql://postgres.<ref>:PASSWORD@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres?sslmode=require`
+
+   (URL-encode special characters in the password.)
 
 2. **Supabase CLI** — from repo root, after `supabase login` and `supabase link --project-ref <ref>`:
 
