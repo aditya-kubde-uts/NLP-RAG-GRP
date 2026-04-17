@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
+from dotenv import load_dotenv
 
 psycopg = pytest.importorskip("psycopg", reason="psycopg not installed")
 
@@ -14,6 +16,7 @@ def test_database_connect_and_pgvector_enabled() -> None:
     if os.environ.get("RUN_LIVE_DB") != "1":
         pytest.skip("Set RUN_LIVE_DB=1 to run live Supabase/Postgres checks")
 
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
     dsn = os.environ.get("DATABASE_URL")
     if not dsn:
         pytest.skip("DATABASE_URL not set")
