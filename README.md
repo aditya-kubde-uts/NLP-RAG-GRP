@@ -2,7 +2,7 @@
 
 Multi-tenant Retrieval-Augmented Generation platform. Super Admins create isolated RAG chatbots for different businesses; each business gets its own admin dashboard + user chat portal — powered by Azure OpenAI, Supabase (Postgres + pgvector), FastAPI, and React.
 
-> **Status:** Phase 0 complete — project scaffold ready. See [PLAN.md](PLAN.md) for the full 12-phase roadmap and [STEPS.md](STEPS.md) for the detailed implementation reference.
+> **Status:** Phase 0 complete; **Phase 1** migration SQL is in `supabase/migrations/` — apply to your Supabase project (see [backend/README.md](backend/README.md)). See [PLAN.md](PLAN.md) for the roadmap and [STEPS.md](STEPS.md) for the detailed reference.
 
 ---
 
@@ -115,7 +115,7 @@ RAG-Factory/
 | Phase | Description | Status |
 |---|---|---|
 | 0 | Project scaffold & environment | Done |
-| 1 | Supabase schema, pgvector, RLS | Pending |
+| 1 | Supabase schema, pgvector, RLS | Migrations in repo — apply to hosted DB |
 | 2 | Backend foundation | Pending |
 | 3 | Authentication | Pending |
 | 4 | Super Admin Dashboard | Pending |

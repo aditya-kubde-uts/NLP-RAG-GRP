@@ -13,7 +13,7 @@
 | # | Phase | Status |
 |---|---|---|
 | 0 | Project Init & Env | [x] |
-| 1 | Supabase Schema + RLS + pgvector | [ ] |
+| 1 | Supabase Schema + RLS + pgvector | [~] |
 | 2 | Backend Foundation | [ ] |
 | 3 | Authentication | [ ] |
 | 4 | Super Admin Dashboard | [ ] |
@@ -409,57 +409,63 @@ Manual:
 
 ---
 
-### Phase 1 — Supabase Schema + RLS + pgvector  `[ ]`
+### Phase 1 — Supabase Schema + RLS + pgvector  `[~]`
 
 **Objective.** Provision Supabase project, enable pgvector, apply schema + RLS + helper functions via migration files.
 
-**Prereqs:** `[ ]` Phase 0 complete.
+**Prereqs:** `[x]` Phase 0 complete.
 
 #### Tasks
 
-- `[ ]` 1.1 Create Supabase project (region close to you)
-  - `[ ]` Copy URL, anon key, service role key, DB connection string → `backend/.env`
-  - `[ ]` Copy URL + anon key → `frontend/.env`
-- `[ ]` 1.2 Supabase CLI setup
-  - `[ ]` Install Supabase CLI
-  - `[ ]` `supabase login`
-  - `[ ]` `supabase link --project-ref <ref>`
-- `[ ]` 1.3 Create migration files in `supabase/migrations/`
-  - `[ ]` `0001_extensions.sql` — `CREATE EXTENSION IF NOT EXISTS vector;`
-  - `[ ]` `0002_businesses.sql`
-  - `[ ]` `0003_business_members.sql`
-  - `[ ]` `0004_knowledge_chunks.sql` (incl. HNSW + FTS indexes)
-  - `[ ]` `0005_conversations.sql`
-  - `[ ]` `0006_chat_messages.sql`
-  - `[ ]` `0007_alerts.sql`
-  - `[ ]` `0008_response_cache.sql`
-  - `[ ]` `0009_user_profiles.sql` (incl. `handle_new_user` trigger)
-  - `[ ]` `0010_rls_policies.sql` (all policies from STEPS.md Phase 1.4)
-  - `[ ]` `0011_search_knowledge_fn.sql` (hybrid search function)
-- `[ ]` 1.4 Apply migrations
-  - `[ ]` `supabase db push`
-  - `[ ]` Verify in Supabase Dashboard → Tables
-- `[ ]` 1.5 Storage bucket `uploads` (private, 50 MB, PDF/TXT/MD)
+- `[x]` 1.1 Create Supabase project (region close to you)
+  - `[x]` Copy URL, anon/publishable key, service role key, DB connection string → `backend/.env` (local)
+  - `[x]` Copy URL + key → `frontend/.env` (local)
+- `[~]` 1.2 Supabase CLI setup (optional if using `apply_migrations.py`)
+  - `[ ]` Install Supabase CLI (`npx supabase` works without global install)
+  - `[ ]` `supabase login` + `supabase link --project-ref <ref>` (for `supabase db push`)
+- `[x]` 1.3 Create migration files in `supabase/migrations/` (12 files, STEPS.md Phase 1)
+  - `[x]` `20260418120000_enable_pgvector.sql`
+  - `[x]` `20260418120001_create_businesses.sql`
+  - `[x]` `20260418120002_create_business_members.sql`
+  - `[x]` `20260418120003_create_knowledge_chunks.sql` (HNSW + FTS)
+  - `[x]` `20260418120004_create_conversations.sql`
+  - `[x]` `20260418120005_create_chat_messages.sql`
+  - `[x]` `20260418120006_create_alerts.sql`
+  - `[x]` `20260418120007_create_response_cache.sql`
+  - `[x]` `20260418120008_create_user_profiles_and_trigger.sql`
+  - `[x]` `20260418120009_enable_rls_policies.sql`
+  - `[x]` `20260418120010_create_search_knowledge_function.sql`
+  - `[x]` `20260418120011_storage_uploads_bucket.sql`
+- `[x]` 1.3b `npx supabase init` → `supabase/config.toml` in repo
+- `[x]` 1.3c `backend/scripts/apply_migrations.py` — applies migrations via `DATABASE_URL` + `sqlparse` (IPv6-friendly `hostaddr` on Windows)
+- `[ ]` 1.4 Apply migrations **on your machine** (needs outbound TCP to Postgres; some networks block `:5432`)
+  - `[ ]` **Option A:** `cd backend && uv sync && uv run python scripts/apply_migrations.py`
+  - `[ ]` **Option B:** `npx supabase db push` (after `supabase link`)
+  - `[ ]` **Option C:** paste each file in order into **SQL Editor** in the Supabase dashboard
+  - `[ ]` Verify in Dashboard → **Database** → **Tables**
+- `[x]` 1.5 Storage bucket `uploads` (migration `..._storage_uploads_bucket.sql`)
 - `[ ]` 1.6 Create super-admin user
-  - `[ ]` Add user via Supabase Dashboard → Auth
-  - `[ ]` `UPDATE user_profiles SET is_super_admin = TRUE WHERE email = ...`
+  - `[ ]` Add user via Supabase Dashboard → **Authentication** → **Users**
+  - `[ ]` SQL: `UPDATE public.user_profiles SET is_super_admin = TRUE WHERE email = 'your@email';`
 
 #### Testing
 
 Automated:
-- `[ ]` `pytest backend/tests/test_db_connection.py` connects + lists tables
+- `[x]` Default `uv run pytest` — health test only (no live DB)
+- `[ ]` Optional live check: `RUN_LIVE_DB=1 uv run pytest backend/tests/test_db_integration.py -m integration`
 
-Manual:
+Manual (after 1.4 succeeds):
 - `[ ]` `SELECT * FROM pg_extension WHERE extname = 'vector'` → 1 row
-- `[ ]` Green lock icon on all 8 tables (RLS enabled)
-- `[ ]` HNSW index visible on `knowledge_chunks.embedding`
-- `[ ]` `SELECT search_knowledge(gen_random_uuid(), array_fill(0::float, ARRAY[1536])::vector);` returns empty (no error)
-- `[ ]` Bucket `uploads` exists and is private
+- `[ ]` RLS enabled on all 8 public tables
+- `[ ]` HNSW index on `knowledge_chunks.embedding`
+- `[ ]` `SELECT * FROM search_knowledge(gen_random_uuid(), array_fill(0::float, ARRAY[1536])::vector(1536), '', 1, 0.0);` — empty result, no error
+- `[ ]` Storage → bucket `uploads` exists, private
 
 #### Definition of Done
 
-- `[ ]` All tasks checked, all tests green
-- `[ ]` `git add -A && git commit -m "Phase 1: Supabase schema, pgvector, RLS policies, and storage"`
+- `[ ]` Migrations applied on hosted Supabase + manual checks above
+- `[x]` Migration SQL + apply script committed to git
+- `[ ]` `git commit -m "Phase 1: Supabase schema, pgvector, RLS policies, and storage"` (pending push after you verify apply)
 
 ---
 

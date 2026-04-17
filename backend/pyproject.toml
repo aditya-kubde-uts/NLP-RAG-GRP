@@ -63,6 +63,7 @@ dev = [
     "pytest-cov>=5.0.0",
     "respx>=0.21.1",
     "ruff>=0.7.0",
+    "sqlparse>=0.5.0",
 ]
 
 [tool.uv]
@@ -109,6 +110,9 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
+]
+markers = [
+    "integration: tests that hit a real Supabase/Postgres (opt-in via RUN_LIVE_DB=1)",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:pydantic.*",
