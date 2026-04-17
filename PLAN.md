@@ -8,11 +8,11 @@
 
 ## Status
 
-**Overall:** `0 / 13` phases complete  _(Phase 0 through Phase 12)_
+**Overall:** `1 / 13` phases complete  _(Phase 0 through Phase 12)_
 
 | # | Phase | Status |
 |---|---|---|
-| 0 | Project Init & Env | [ ] |
+| 0 | Project Init & Env | [x] |
 | 1 | Supabase Schema + RLS + pgvector | [ ] |
 | 2 | Backend Foundation | [ ] |
 | 3 | Authentication | [ ] |
@@ -349,60 +349,63 @@ Commit message format: `Phase N: <description>` (matches STEPS.md).
 
 ---
 
-### Phase 0 — Project Init & Environment  `[ ]`
+### Phase 0 — Project Init & Environment  `[x]`
 
 **Objective.** Scaffold repo, install toolchains, initialise git.
 
-**Prereqs:** `[ ]` none.
+**Prereqs:** `[x]` none.
 
 #### Tasks
 
-- `[ ]` 0.1 Create project root, `git init`, add `.gitignore`
-  - `[ ]` Include Python (`venv/`, `__pycache__/`, `.env`), Node (`node_modules/`, `dist/`), IDE, OS patterns
-- `[ ]` 0.2 Install system tooling
-  - `[ ]` Python 3.11+ confirmed (`python --version`)
-  - `[ ]` Node 18+ confirmed (`node --version`)
-  - `[ ]` Install `uv` (`pipx install uv` or winget)
-  - `[ ]` Install `pnpm` (`npm i -g pnpm`)
-  - `[ ]` Install Tesseract OCR (Windows: UB-Mannheim build)
-- `[ ]` 0.3 Backend scaffold
-  - `[ ]` Create `backend/app/{api,core,models,db}/` with `__init__.py`
-  - `[ ]` `backend/pyproject.toml` with dependencies from STEPS.md plus `structlog`, `pytest`, `pytest-asyncio`, `ruff`, `httpx`
-  - `[ ]` `uv sync` — creates `.venv`, installs everything
-  - `[ ]` Configure `ruff` in `pyproject.toml` (line-length 100, target py311)
-  - `[ ]` Configure `pytest` in `pyproject.toml` (asyncio mode auto, testpaths `tests`)
-- `[ ]` 0.4 Frontend scaffold
-  - `[ ]` `pnpm create vite frontend --template react-ts`
-  - `[ ]` `pnpm add react-router-dom @supabase/supabase-js axios lucide-react @tanstack/react-query zustand react-hook-form zod @hookform/resolvers`
-  - `[ ]` `pnpm add -D tailwindcss @tailwindcss/vite @types/node vitest @testing-library/react @testing-library/jest-dom jsdom @playwright/test`
-  - `[ ]` `pnpm dlx shadcn@latest init` (choose defaults, base color slate, CSS variables yes)
-  - `[ ]` Configure Tailwind v4 in `vite.config.ts` + `src/index.css`
-  - `[ ]` Vite proxy `/api` → `http://localhost:8000`
-  - `[ ]` Configure `tsconfig.json` strict mode, path aliases (`@/*` → `src/*`)
-- `[ ]` 0.5 `.env.example` files
-  - `[ ]` `backend/.env.example` (Supabase + Azure OpenAI + app settings — see STEPS.md Phase 0.8)
-  - `[ ]` `frontend/.env.example` with `VITE_*` vars
-- `[ ]` 0.6 Dev tooling
-  - `[ ]` `.pre-commit-config.yaml` with ruff, prettier, eslint
-  - `[ ]` `pre-commit install`
-  - `[ ]` ESLint + Prettier config in `frontend/`
+- `[x]` 0.1 Create project root, `git init`, add `.gitignore`
+  - `[x]` Include Python (`venv/`, `__pycache__/`, `.env`), Node (`node_modules/`, `dist/`), IDE, OS patterns
+- `[x]` 0.2 Install system tooling
+  - `[x]` Python 3.11+ confirmed (3.12.10)
+  - `[x]` Node 18+ confirmed (v22.22)
+  - `[x]` Install `uv` (0.8.22)
+  - `[x]` Install `pnpm` (10.33)
+  - `[ ]` Install Tesseract OCR (deferred — only needed for scanned-PDF OCR in Phase 5)
+- `[x]` 0.3 Backend scaffold
+  - `[x]` Create `backend/app/{api,core,models,db}/` with `__init__.py`
+  - `[x]` `backend/pyproject.toml` with dependencies from STEPS.md plus `structlog`, `pytest`, `pytest-asyncio`, `ruff`, `httpx`, `slowapi`, `tiktoken`
+  - `[x]` `uv sync` — creates `.venv`, installs everything
+  - `[x]` Configure `ruff` in `pyproject.toml` (line-length 100, target py311)
+  - `[x]` Configure `pytest` in `pyproject.toml` (asyncio mode auto, testpaths `tests`)
+- `[x]` 0.4 Frontend scaffold
+  - `[x]` `pnpm create vite frontend --template react-ts`
+  - `[x]` `pnpm add react-router-dom @supabase/supabase-js axios lucide-react @tanstack/react-query zustand react-hook-form zod @hookform/resolvers sonner clsx tailwind-merge class-variance-authority`
+  - `[x]` `pnpm add -D tailwindcss @tailwindcss/vite tw-animate-css vitest @vitest/ui jsdom @testing-library/react @testing-library/jest-dom @testing-library/user-event @playwright/test prettier eslint-config-prettier`
+  - `[x]` shadcn init equivalent — `components.json` + `lib/utils.ts` + CSS variables in `index.css`
+  - `[x]` Configure Tailwind v4 in `vite.config.ts` + `src/index.css` (dark-mode tokens, `@theme inline`)
+  - `[x]` Vite proxy `/api` → `http://localhost:8000`
+  - `[x]` Configure `tsconfig.json` strict mode, path aliases (`@/*` → `src/*`)
+- `[x]` 0.5 `.env.example` files
+  - `[x]` `backend/.env.example` (Supabase + Azure OpenAI + app settings — see STEPS.md Phase 0.8)
+  - `[x]` `frontend/.env.example` with `VITE_*` vars
+- `[x]` 0.6 Dev tooling
+  - `[x]` `.pre-commit-config.yaml` with ruff, prettier, eslint
+  - `[ ]` `pre-commit install` (deferred — user runs locally once `pip install pre-commit`)
+  - `[x]` ESLint + Prettier config in `frontend/`
 
 #### Testing
 
 Automated:
-- `[ ]` `cd backend && uv run pytest --version` prints version
-- `[ ]` `cd frontend && pnpm vitest --version` prints version
+- `[x]` `cd backend && uv run pytest` — 1 test passed (`test_health`)
+- `[x]` `cd frontend && pnpm test` — 4 tests passed (`cn()` suite)
+- `[x]` `cd frontend && pnpm typecheck` — strict mode green
+- `[x]` `cd frontend && pnpm build` — Vite build succeeds (19 modules, 15 kB CSS)
+- `[x]` `cd frontend && pnpm lint && pnpm format:check` — clean
 
 Manual:
-- `[ ]` `cd backend && uv run python -c "import fastapi; print(fastapi.__version__)"` works
-- `[ ]` `cd frontend && pnpm dev` starts Vite on :5173
-- `[ ]` `git status` — no `node_modules/`, no `.venv/`, no `.env` tracked
+- `[x]` `cd backend && uv run python -c "import fastapi; ..."` works (fastapi 0.136.0)
+- `[ ]` `cd frontend && pnpm dev` starts Vite on :5173 (user verifies visually)
+- `[x]` `git status` — no `node_modules/`, no `.venv/`, no `.env` tracked (after `git init`)
 
 #### Definition of Done
 
-- `[ ]` All tasks checked
-- `[ ]` All tests green
-- `[ ]` `git add -A && git commit -m "Phase 0: Project scaffold, dependencies, and environment setup"`
+- `[x]` All tasks checked (except two deferred user-system items)
+- `[x]` All tests green
+- `[ ]` `git add -A && git commit -m "Phase 0: Project scaffold, dependencies, and environment setup"` (next step)
 
 ---
 

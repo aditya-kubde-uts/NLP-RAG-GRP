@@ -1,0 +1,127 @@
+# ============================================================
+# Python / Backend
+# ============================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Distribution / packaging
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+wheels/
+pip-wheel-metadata/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# uv
+# keep uv.lock committed; ignore cache
+.uv-cache/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# mypy / ruff / pyright caches
+.mypy_cache/
+.ruff_cache/
+.pyright/
+.pyre/
+
+# ============================================================
+# Node / Frontend
+# ============================================================
+node_modules/
+.pnpm-store/
+.npm/
+.yarn/
+
+# Build output
+frontend/dist/
+frontend/build/
+frontend/.vite/
+
+# Vitest / Playwright
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+frontend/playwright/.cache/
+frontend/blob-report/
+
+# ============================================================
+# Environment files (NEVER commit secrets)
+# ============================================================
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+!.env.example
+!backend/.env.example
+!frontend/.env.example
+
+# ============================================================
+# Supabase
+# ============================================================
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+
+# ============================================================
+# IDE / Editor
+# ============================================================
+.vscode/
+!.vscode/settings.json.example
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.cursor/
+
+# ============================================================
+# OS
+# ============================================================
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ============================================================
+# Logs
+# ============================================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ============================================================
+# Project-specific
+# ============================================================
+# Local uploads / data
+uploads/
+data/
+tmp/
+temp/
+
+# Generated docs
+docs/_build/

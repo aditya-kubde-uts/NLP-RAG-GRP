@@ -1,26 +1,30 @@
-# 🏭 RAG Factory — Multi-Tenant RAG Platform Implementation Guide
+# 🏭 RAG Factory — Multi-Tenant RAG Platform
 
-## Project Overview
+## Complete Implementation Guide for Cursor AI
 
-Welcome to the **RAG Factory** project! Our goal here is to build a scalable, multi-tenant SaaS platform where an administrative team can effortlessly spin up, customize, and manage independent Retrieval-Augmented Generation (RAG) chatbots for different business clients. 
+> **PROJECT CODENAME:** RAG Factory
+> **DESCRIPTION:** A multi-tenant platform where a Super Admin can create, manage, and deploy isolated RAG (Retrieval-Augmented Generation) chatbot systems for different businesses. Each business gets its own Admin Dashboard + User Chat Portal — powered by a shared Azure OpenAI backbone and Supabase (PostgreSQL + pgvector) for data isolation.
 
-Imagine a scenario where a university ("UTS") needs a bot to answer student queries from handbooks, and a restaurant needs a different bot to answer questions about its menu and opening hours. Instead of deploying separate codebases for each, RAG Factory will serve as a central "command center". 
+---
 
-**Key Features:**
-- **Super Admin Dashboard:** A top-level view to onboard new businesses, track API usage, and manage platform-wide analytics.
-- **Business Admin Portals:** A dedicated space for each business to upload their own unique PDFs or web links, monitor chat logs, and broadcast emergency alerts to their users.
-- **User Chat Portals:** The public or authenticated interface where end-users actually converse with the chatbots.
-- **Embeddable Widgets:** Small JavaScript snippets allowing the chatbot to be easily embedded directly into the business's own external website.
-
-We are upgrading our architecture from a single-tenant local prototype to a robust cloud-ready product. We'll be using **FastAPI** for a performant backend, a **React/Vite** Single Page Application for a smooth administrative experience, and **Supabase (PostgreSQL with pgvector)** to handle true multi-tenant data isolation and hybrid semantic search. We will continue using **Azure OpenAI** as our core language model provider.
-
-This document breaks down the entire development lifecycle into structured, testable phases. Let's get building!
+> [!IMPORTANT]
+> ## Instructions for Cursor AI
+>
+> 1. **Read this entire document before starting any work.**
+> 2. **After completing each MAJOR TASK (Phase)**, stop and report what was done. Wait for the user to say "continue" or "proceed" before moving to the next phase.
+> 3. **Git backup after every phase:** Run `git add -A && git commit -m "<FEAT/ADD/etc..>: <description>"` after each completed phase.
+> 4. **Testing is mandatory.** Each phase includes test cases. Do NOT skip them.
+> 5. **If you identify a better approach** for any step, suggest it to the user before implementing.
+> 6. **Use Cursor features:** Use `@codebase` for context, Composer for multi-file edits, and set up MCP servers (Supabase MCP) if available in your environment.
+> 7. **Reference Project:** The existing UTS UniBot RAG project at `d:\Subs\sem4\research project\grp-p\` is the architectural reference. DO NOT modify it. Use `@file` to reference its files when porting logic.
+> 8. **Error Handling:** Every API endpoint must return structured JSON errors. No bare exceptions.
+> 9. **If you encounter Supabase MCP:** Connect it via `Settings > MCP > Add Server` using the `@supabase/mcp-server-supabase` npm package. Use it for database migrations and schema management.
 
 ---
 
 ## 📐 Architecture Overview
 
-```text
+```
 RAG-Factory/
 ├── backend/                    # FastAPI Python Backend
 │   ├── app/
@@ -96,9 +100,9 @@ RAG-Factory/
 
 ---
 
-## 🎯 Target Improvements Over Prototype V1
+## 🎯 Improvements Over Reference Project (UTS UniBot)
 
-| Area | V1 | RAG Factory (V2) |
+| Area | UTS UniBot (Reference) | RAG Factory (New) |
 |---|---|---|
 | **Frontend** | Streamlit (limited routing, no custom layouts) | React + Vite + shadcn/ui (full SPA, modern UI) |
 | **Vector DB** | ChromaDB (local file-based, single tenant) | pgvector in Supabase (cloud PostgreSQL, multi-tenant) |
@@ -242,8 +246,9 @@ npm install -D tailwindcss @tailwindcss/vite
 ```
 
 > [!NOTE]
-> We will use **Tailwind CSS v4** (via Vite plugin) + custom components inspired by shadcn/ui patterns.
-> Build reusable components manually to keep the bundle small and debugging straightforward.
+> We use **Tailwind CSS v4** (via Vite plugin) + custom components inspired by shadcn/ui patterns.
+> This gives us a premium, modern look without installing a heavy component library.
+> Build reusable components manually — this keeps the bundle small and debugging easy.
 
 ### Task 0.7: Configure Tailwind CSS v4
 In `frontend/vite.config.js`:
@@ -298,11 +303,18 @@ VITE_API_BASE_URL=http://localhost:8000
 
 ---
 
-### Phase 0 Checklist
-- [ ] `cd backend && python -c "import fastapi; print(fastapi.__version__)"` prints a version
-- [ ] `cd backend && python -c "import openai; print('Azure OpenAI SDK OK')"` runs with no errors
-- [ ] `cd frontend && npm run dev` successfully starts the Vite dev server on `http://localhost:5173`
+### ✅ Phase 0 Testing Checklist
+- [ ] `cd backend && python -c "import fastapi; print(fastapi.__version__)"` → prints version
+- [ ] `cd backend && python -c "import openai; print('Azure OpenAI SDK OK')"` → no errors
+- [ ] `cd frontend && npm run dev` → Vite dev server starts on `http://localhost:5173`
 - [ ] `.gitignore` is working (no `node_modules/` or `venv/` tracked)
+
+### 🔒 Git Backup
+```bash
+git add -A && git commit -m "Phase 0: Project scaffold, dependencies, and environment setup"
+```
+
+### 🛑 STOP — Wait for user confirmation before proceeding to Phase 1.
 
 ---
 
@@ -313,14 +325,22 @@ VITE_API_BASE_URL=http://localhost:8000
 ## Objective
 Create the Supabase project, enable pgvector, define all tables with Row-Level Security (RLS), and configure authentication.
 
+> [!IMPORTANT]
+> **Cursor MCP:** If Cursor has Supabase MCP available, connect it now:
+> - Go to `Settings > MCP > Add Server`
+> - Use `npx -y @supabase/mcp-server-supabase@latest`
+> - Provide your Supabase access token
+> - Use the MCP tools (`apply_migration`, `execute_sql`, `list_tables`) throughout this phase
+
 ### Task 1.1: Create Supabase Project
-1. Go to [supabase.com](https://supabase.com) and create a new project.
-2. Select an appropriate region.
-3. Save the project URL, anon key, and service role key to `backend/.env` and `frontend/.env`.
-4. Go to **Settings > Database** and copy the connection string to `DATABASE_URL` in `backend/.env`.
+1. Go to [supabase.com](https://supabase.com) and create a new project
+2. Choose region closest to you (e.g., `ap-southeast-2` for Australia)
+3. Save the project URL, anon key, and service role key to `backend/.env` and `frontend/.env`
+4. Go to **Settings > Database** and copy the connection string to `DATABASE_URL` in `backend/.env`
 
 ### Task 1.2: Enable pgvector Extension
-Run this SQL in Supabase SQL Editor:
+Run this SQL in Supabase SQL Editor (or via MCP `apply_migration`):
+
 ```sql
 -- Enable the pgvector extension for vector similarity search
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -328,7 +348,8 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 ### Task 1.3: Create Database Schema
 
-Run the following migrations using the Supabase SQL Editor or migration CLI:
+> [!NOTE]
+> Run each migration separately for clean version control. If using Supabase MCP, use `apply_migration` for each.
 
 #### Migration 1: `create_businesses_table`
 ```sql
@@ -725,7 +746,7 @@ VALUES ('uploads', 'uploads', FALSE, 52428800, ARRAY['application/pdf', 'text/pl
 
 ### Task 1.7: Create First Super Admin User
 1. Go to Supabase Dashboard > Authentication > Users
-2. Click "Add User" → enter an email and password.
+2. Click "Add User" → enter your email and password
 3. Then mark them as super admin:
 ```sql
 UPDATE public.user_profiles SET is_super_admin = TRUE WHERE email = 'YOUR_EMAIL_HERE';
@@ -733,13 +754,22 @@ UPDATE public.user_profiles SET is_super_admin = TRUE WHERE email = 'YOUR_EMAIL_
 
 ---
 
-### Phase 1 Checklist
-- [ ] All migrations applied successfully (verify in Supabase Dashboard > Database > Tables).
-- [ ] The `vector` extension is active.
-- [ ] RLS policies are enabled on all tables.
-- [ ] `search_knowledge` function exists and runs without error.
-- [ ] Storage bucket `uploads` is properly configured.
-- [ ] Base Super Admin user account is set up.
+### ✅ Phase 1 Testing Checklist
+- [ ] All 10 migrations applied successfully (check Supabase Dashboard > Database > Tables)
+- [ ] Verify tables exist: `businesses`, `business_members`, `knowledge_chunks`, `conversations`, `chat_messages`, `alerts`, `response_cache`, `user_profiles`
+- [ ] Verify pgvector extension: Run `SELECT * FROM pg_extension WHERE extname = 'vector';` — should return 1 row
+- [ ] Verify HNSW index exists on `knowledge_chunks.embedding`
+- [ ] Verify RLS is enabled on all tables (green lock icon in Supabase Dashboard)
+- [ ] Verify `search_knowledge` function exists: Run `SELECT search_knowledge(gen_random_uuid(), '[0,0,...,0]'::vector(1536));` — should return empty (not error)
+- [ ] Storage bucket `uploads` is created
+- [ ] Super admin user exists and `is_super_admin = TRUE` in `user_profiles`
+
+### 🔒 Git Backup
+```bash
+git add -A && git commit -m "Phase 1: Supabase schema, pgvector, RLS policies, and storage"
+```
+
+### 🛑 STOP — Wait for user confirmation before proceeding to Phase 2.
 
 ---
 
@@ -748,35 +778,157 @@ UPDATE public.user_profiles SET is_super_admin = TRUE WHERE email = 'YOUR_EMAIL_
 # ============================================================
 
 ## Objective
-Build the FastAPI application skeleton with the Supabase client, environment config, CORS, health check endpoints, and authentication middleware.
+Build the FastAPI application skeleton with Supabase client, environment config, CORS, health check endpoints, and the authentication middleware.
 
 ### Task 2.1: Create `backend/app/config.py`
-Set up environment configuration using Pydantic Settings so the app safely parses `.env` variables.
-- Include definitions for Supabase URLs and Keys.
-- Include definitions for Azure OpenAI variables.
+Environment configuration using Pydantic Settings:
+```python
+from pydantic_settings import BaseSettings
+from functools import lru_cache
+
+class Settings(BaseSettings):
+    # Supabase
+    supabase_url: str
+    supabase_anon_key: str
+    supabase_service_role_key: str
+    database_url: str
+
+    # Azure OpenAI
+    azure_openai_api_key: str
+    azure_openai_endpoint: str
+    azure_openai_api_version: str = "2024-02-01"
+    azure_embedding_deployment_name: str = "text-embedding-3-small"
+    azure_llm_deployment_name: str = "gpt-4.1-mini"
+
+    # App
+    super_admin_email: str = "admin@ragfactory.com"
+    cors_origins: str = "http://localhost:5173"
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+
+@lru_cache()
+def get_settings():
+    return Settings()
+```
 
 ### Task 2.2: Create `backend/app/db/supabase_client.py`
-Instantiate two clients:
-- A regular client using the Anon key (for operations where RLS applies).
-- A Service Role client for backend-only operations that need to bypass RLS.
+```python
+from supabase import create_client, Client
+from app.config import get_settings
+
+settings = get_settings()
+
+# Public client (uses anon key, respects RLS)
+supabase: Client = create_client(settings.supabase_url, settings.supabase_anon_key)
+
+# Service client (bypasses RLS, for backend-only operations)
+supabase_admin: Client = create_client(settings.supabase_url, settings.supabase_service_role_key)
+```
 
 ### Task 2.3: Create `backend/app/dependencies.py`
-Set up dependency injection functions for FastAPI endpoints:
-- Validate JWTs arriving from headers using Supabase Auth.
-- Create specific checks ensuring certain routes can only be accessed by Super Admins or Business Admins.
+Shared dependencies for auth validation and injecting business context:
+```python
+from fastapi import Depends, HTTPException, Header
+from app.db.supabase_client import supabase, supabase_admin
+
+async def get_current_user(authorization: str = Header(None)):
+    """Validate JWT token from Supabase Auth and return user info."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+
+    token = authorization.split(" ")[1]
+    try:
+        user_response = supabase.auth.get_user(token)
+        if not user_response or not user_response.user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return user_response.user
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
+
+async def require_super_admin(user = Depends(get_current_user)):
+    """Ensure the user is a super admin."""
+    profile = supabase_admin.table("user_profiles").select("is_super_admin").eq("id", str(user.id)).single().execute()
+    if not profile.data or not profile.data.get("is_super_admin"):
+        raise HTTPException(status_code=403, detail="Super admin access required")
+    return user
+
+async def require_business_admin(user = Depends(get_current_user)):
+    """Return user but will need business_id check at route level."""
+    return user
+
+# Optional auth: Returns None if not authenticated (for public chat endpoints)
+async def get_optional_user(authorization: str = Header(None)):
+    """Returns user if authenticated, None otherwise."""
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    try:
+        token = authorization.split(" ")[1]
+        user_response = supabase.auth.get_user(token)
+        return user_response.user if user_response and user_response.user else None
+    except:
+        return None
+```
 
 ### Task 2.4: Create `backend/app/main.py`
-- Initialize the FastAPI application.
-- Set up CORS middleware allowing your frontend domain.
-- Create a basic `/api/health` endpoint.
-- Prepare comments or placeholders for future route inclusions.
+```python
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.config import get_settings
+
+settings = get_settings()
+
+app = FastAPI(
+    title="RAG Factory API",
+    description="Multi-tenant RAG platform backend",
+    version="1.0.0"
+)
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins.split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Health check
+@app.get("/api/health")
+async def health_check():
+    return {"status": "healthy", "service": "RAG Factory API"}
+
+# Import and include routers (will be created in later phases)
+# from app.api import auth, super_admin, business_admin, chat, knowledge
+# app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+# app.include_router(super_admin.router, prefix="/api/super-admin", tags=["Super Admin"])
+# app.include_router(business_admin.router, prefix="/api/business", tags=["Business Admin"])
+# app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
+# app.include_router(knowledge.router, prefix="/api/knowledge", tags=["Knowledge Base"])
+```
+
+### Task 2.5: Test Backend Startup
+```bash
+cd backend
+uvicorn app.main:app --reload --port 8000
+```
 
 ---
 
-### Phase 2 Checklist
-- [ ] Command `uvicorn app.main:app --reload --port 8000` starts the server without errors.
-- [ ] `GET http://localhost:8000/api/health` returns a healthy status.
-- [ ] `.env` configurations load appropriately via Pydantic.
+### ✅ Phase 2 Testing Checklist
+- [ ] `uvicorn app.main:app --reload --port 8000` starts without errors
+- [ ] `GET http://localhost:8000/api/health` returns `{"status": "healthy", "service": "RAG Factory API"}`
+- [ ] `GET http://localhost:8000/docs` shows Swagger UI
+- [ ] Environment variables load correctly (no `ValidationError` from Pydantic Settings)
+- [ ] Supabase client initializes (no import errors)
+
+### 🔒 Git Backup
+```bash
+git add -A && git commit -m "Phase 2: FastAPI skeleton, Supabase client, auth dependencies"
+```
+
+### 🛑 STOP — Wait for user confirmation before proceeding to Phase 3.
 
 ---
 
@@ -785,41 +937,97 @@ Set up dependency injection functions for FastAPI endpoints:
 # ============================================================
 
 ## Objective
-Build auth API routes (signup, login, profile) and wire up the React frontend auth flow with protected routes.
+Build auth API routes (signup, login, profile) and the React frontend auth flow with protected routes.
 
 ### Task 3.1: Create `backend/app/api/auth.py`
-Define the backend proxies for:
-- Signups and Logins
-- Fetching user profiles via the session token
-- Logouts
-These will interact heavily with Supabase's Auth endpoints.
+Implement these endpoints:
+- `POST /api/auth/signup` — Register new user (email + password + full_name)
+- `POST /api/auth/login` — Login with email + password, return JWT + user profile
+- `GET /api/auth/me` — Get current user profile (requires JWT)
+- `POST /api/auth/logout` — Invalidate session
+
+> [!NOTE]
+> Use Supabase Auth SDK for all auth operations. The backend acts as a proxy to add business logic (like checking super_admin status).
 
 ### Task 3.2: Create `backend/app/models/auth.py`
-Define Pydantic schemas validating expected `SignupRequest`, `LoginRequest`, and `UserProfile` response shapes.
+Pydantic schemas for request/response:
+```python
+from pydantic import BaseModel, EmailStr
+from typing import Optional
+
+class SignupRequest(BaseModel):
+    email: str
+    password: str
+    full_name: str
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class UserProfile(BaseModel):
+    id: str
+    email: str
+    full_name: Optional[str]
+    is_super_admin: bool = False
+    businesses: list = []  # List of businesses user is admin of
+```
 
 ### Task 3.3: Create Frontend Auth Context (`frontend/src/context/AuthContext.jsx`)
-- Initialize the Supabase JS client.
-- Provide user context throughout the app based on `onAuthStateChange`.
-- Expose methods to sign in, out, and register.
+- Initialize Supabase JS client
+- Listen to `onAuthStateChange` events
+- Provide `user`, `session`, `signIn`, `signUp`, `signOut` to all components
+- Auto-redirect to login if accessing protected routes without session
 
 ### Task 3.4: Create Frontend Auth Pages
-Build the UI:
-- `frontend/src/pages/auth/LoginPage.jsx`
-- `frontend/src/pages/auth/SignupPage.jsx`
-Implement a modern design standard (e.g., glassmorphism, appropriate visual hierarchy).
+- `frontend/src/pages/auth/LoginPage.jsx` — Email + password login form
+- `frontend/src/pages/auth/SignupPage.jsx` — Registration form (email + password + full name)
+
+> [!TIP]
+> **Design Guidelines:**
+> - Use a centered card layout with glassmorphism effect (backdrop-blur, subtle border)
+> - Dark theme by default (#0f0f23 background, #1a1a2e cards)
+> - Accent color: Indigo (#6366f1) for buttons and focus rings
+> - Smooth transitions on form inputs (border-color, box-shadow)
+> - Show loading spinner on submit buttons
+> - Display error messages inline (red text below the input)
 
 ### Task 3.5: Create Protected Route Wrapper
-Provide a `ProtectedRoute.jsx` component that wraps specific React-Router views, ejecting users to the login page if they lack valid credentials or roles.
+`frontend/src/components/common/ProtectedRoute.jsx`:
+- If user is authenticated → render children
+- If not → redirect to `/login`
+- If route requires super_admin but user isn't → show "Access Denied" page
 
-### Task 3.6: Set Up React Router in `frontend/src/App.jsx`
-Establish routes for login, signup, super-admin, business-admin, and user chat portals.
+### Task 3.6: Set Up React Router
+`frontend/src/App.jsx`:
+```jsx
+// Route structure:
+// /login          → LoginPage
+// /signup         → SignupPage
+// /dashboard      → SuperAdmin Dashboard (protected, super_admin only)
+// /b/:slug/admin  → Business Admin Dashboard (protected, business admin)
+// /b/:slug        → User Chat Portal (public or protected based on business settings)
+```
 
 ---
 
-### Phase 3 Checklist
-- [ ] Registering a test user successfully updates Supabase Auth and triggers a row creation in `user_profiles`.
-- [ ] Frontend can login to that test user and navigate naturally to a placeholder dashboard page.
-- [ ] Unauthorized attempts to reach protected views redirect back to the login screen.
+### ✅ Phase 3 Testing Checklist
+
+#### Manual Tests:
+- [ ] Navigate to `http://localhost:5173/signup` → see registration form
+- [ ] Register a new user → user appears in Supabase Auth dashboard
+- [ ] The `user_profiles` table auto-creates a row (via trigger) for the new user
+- [ ] Navigate to `http://localhost:5173/login` → login with created user
+- [ ] After login, `GET /api/auth/me` returns correct user profile
+- [ ] Accessing `/dashboard` without login → redirects to `/login`
+- [ ] After login as super admin → `/dashboard` loads correctly
+- [ ] Logout → session cleared, redirected to `/login`
+
+### 🔒 Git Backup
+```bash
+git add -A && git commit -m "Phase 3: Authentication system (Supabase Auth + React context + protected routes)"
+```
+
+### 🛑 STOP — Wait for user confirmation before proceeding to Phase 4.
 
 ---
 
@@ -828,68 +1036,252 @@ Establish routes for login, signup, super-admin, business-admin, and user chat p
 # ============================================================
 
 ## Objective
-Build the "command center" dashboard restricting to users marked as `is_super_admin`, allowing them to organize all sub-businesses.
+Build the Super Admin Dashboard where the platform owner can create, view, edit, and delete businesses. This is the "command center" of the entire platform.
 
-### Task 4.1: Create APIs in `backend/app/api/super_admin.py`
-Provide endpoints for CRUD operations on the `businesses` table, assigning admins, and calculating platform-wide totals.
+### Task 4.1: Create `backend/app/api/super_admin.py`
+Implement these endpoints (all require `super_admin` role):
+- `GET /api/super-admin/businesses` — List all businesses with stats (chunk count, chat count)
+- `POST /api/super-admin/businesses` — Create new business
+- `GET /api/super-admin/businesses/{business_id}` — Get business details
+- `PUT /api/super-admin/businesses/{business_id}` — Update business
+- `DELETE /api/super-admin/businesses/{business_id}` — Soft delete (set `is_active = FALSE`)
+- `GET /api/super-admin/stats` — Platform-wide stats (total businesses, users, queries, API cost)
+- `POST /api/super-admin/businesses/{business_id}/members` — Add admin to a business
+- `DELETE /api/super-admin/businesses/{business_id}/members/{user_id}` — Remove admin
 
-### Task 4.2: Create Pydantic Models in `backend/app/models/business.py`
-Ensure solid validation for incoming payload shapes when creating or updating organizations.
+### Task 4.2: Create `backend/app/models/business.py`
+```python
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime
 
-### Task 4.3: Implement Frontend Pages
-- `DashboardPage.jsx`: Top stats bar, responsive grid of managed businesses, inline CRUD actions.
-- `CreateBusinessPage.jsx`: Standardized intake form capturing Name, Industry, branding configurations and initial RAG rules.
+class BusinessCreate(BaseModel):
+    name: str
+    slug: str            # Auto-generated from name, editable
+    description: Optional[str] = None
+    industry: str        # Dropdown: Education, Restaurant, Healthcare, Retail, Legal, Other
+    settings: Optional[dict] = None
+
+class BusinessUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    industry: Optional[str] = None
+    logo_url: Optional[str] = None
+    settings: Optional[dict] = None
+    is_active: Optional[bool] = None
+
+class BusinessResponse(BaseModel):
+    id: str
+    name: str
+    slug: str
+    description: Optional[str]
+    industry: str
+    logo_url: Optional[str]
+    settings: dict
+    is_active: bool
+    created_at: datetime
+    chunk_count: int = 0
+    chat_count: int = 0
+    admin_count: int = 0
+```
+
+### Task 4.3: Create Super Admin Dashboard Pages (Frontend)
+
+#### `frontend/src/pages/super-admin/DashboardPage.jsx`
+- **Top Stats Bar:** 4 metric cards (Total Businesses, Total Knowledge Chunks, Total Chats, Estimated API Cost)
+- **Business List:** Responsive grid of business cards, each showing:
+  - Business name + industry badge
+  - Chunk count, Chat count, Admin count
+  - Status indicator (Active/Inactive)
+  - "Manage" button → navigates to business admin
+  - "Edit" button → opens edit modal
+  - "Delete" button → confirmation dialog
+
+#### `frontend/src/pages/super-admin/CreateBusinessPage.jsx`
+- **Form fields:**
+  - Business Name (required)
+  - Slug (auto-generated from name, editable, validated for uniqueness)
+  - Description (textarea)
+  - Industry (dropdown: Education, Restaurant, Healthcare, Retail, Legal, Technology, Other)
+  - Settings:
+    - Toggle: "Require User Login for Chat" (default: OFF)
+    - Custom Welcome Message (textarea)
+    - Primary Brand Color (color picker)
+    - Max Chunks Per Query (number input, default: 8)
+    - Confidence Threshold (slider, default: 0.15)
+- **On submit:** Create business → auto-add current user as admin → redirect to dashboard
+
+> [!TIP]
+> **Design Guidelines for Dashboard:**
+> - Use a persistent sidebar navigation (collapsible on mobile)
+> - Dark theme: `#0a0a1a` background, `#12122a` sidebar, `#1a1a3e` cards
+> - Stat cards: Gradient borders (indigo → purple), subtle glow on hover
+> - Business cards: Hover lift effect (transform: translateY(-2px)), smooth shadow transition
+> - Use Lucide icons throughout (Building2, Database, MessageSquare, Users, Settings, Plus)
+> - Loading states: Skeleton placeholders (pulsing gray rectangles)
+> - Toast notifications for success/error actions (bottom-right corner)
+> - Empty state: Illustration + "Create your first business" CTA button
 
 ### Task 4.4: Create Sidebar Layout Component
-Provide a clean `DashboardLayout.jsx` with persistent sidebar navigation.
+`frontend/src/components/Layout/DashboardLayout.jsx`:
+- Fixed sidebar (240px wide) with:
+  - App logo/name at top
+  - Navigation links (Dashboard, Settings)
+  - User avatar + name at bottom
+  - Logout button
+- Main content area with top breadcrumb bar
 
 ---
 
-### Phase 4 Checklist
-- [ ] The Super Admin view populates with functional widgets measuring system state.
-- [ ] Creating a new business successfully reflects within both the dashboard and the database.
-- [ ] "Delete" functionality cascades effectively or flags `is_active` correctly.
-- [ ] Ordinary users cannot access this dashboard.
+### ✅ Phase 4 Testing Checklist
+
+#### Manual Tests:
+- [ ] Login as super admin → Dashboard loads with empty state
+- [ ] Click "Create Business" → form renders with all fields
+- [ ] Fill form and submit → business created, appears in dashboard
+- [ ] Create 3 businesses with different industries → all appear in grid
+- [ ] Click "Edit" on a business → edit modal shows current values
+- [ ] Update business name → change reflected immediately
+- [ ] Click "Delete" → confirmation dialog shows → confirm → business disappears
+- [ ] Verify in Supabase: business row has `is_active = FALSE` (soft delete)
+- [ ] Stats bar shows correct counts
+- [ ] Non-super-admin user accessing `/dashboard` → "Access Denied" page
+
+### 🔒 Git Backup
+```bash
+git add -A && git commit -m "Phase 4: Super Admin Dashboard with business CRUD management"
+```
+
+### 🛑 STOP — Wait for user confirmation before proceeding to Phase 5.
 
 ---
 
 # ============================================================
-# PHASE 5: RAG ENGINE CORE
+# PHASE 5: RAG ENGINE CORE (Port + Enhance)
 # ============================================================
 
 ## Objective
-Develop the intelligent pipeline parsing files, chunking data, vectorizing context, and orchestrating responses via Azure OpenAI.
+Port the RAG engine from the reference project, replacing ChromaDB with pgvector and upgrading to hybrid search. This is the brain of the platform.
+
+> [!IMPORTANT]
+> **Reference Files (DO NOT MODIFY — read only):**
+> - `@file d:\Subs\sem4\research project\grp-p\src\llm_router.py`
+> - `@file d:\Subs\sem4\research project\grp-p\src\chunker.py`
+> - `@file d:\Subs\sem4\research project\grp-p\src\ingestor.py`
+> - `@file d:\Subs\sem4\research project\grp-p\src\searcher.py`
+> - `@file d:\Subs\sem4\research project\grp-p\src\rag_brain.py`
+> - `@file d:\Subs\sem4\research project\grp-p\src\pdf_parser.py`
+> - `@file d:\Subs\sem4\research project\grp-p\src\scraper.py`
+> - `@file d:\Subs\sem4\research project\grp-p\src\text_cleaner.py`
 
 ### Task 5.1: Create `backend/app/core/llm_router.py`
-Define a wrapper connecting exclusively to the `openai.AzureOpenAI` client. Include backoff logic, token counting, and methods capable of operating fully asynchronously in Python.
+Port from reference, but:
+- **Remove** Gemini/Groq providers — Azure OpenAI only
+- **Use** `openai.AzureOpenAI` client
+- **Add** explicit error handling with retries (3 attempts, exponential backoff)
+- **Add** token counting for cost tracking
+- **Add** async versions of all functions using `asyncio.to_thread()`
+- **Expose:** `get_embedding(texts: List[str]) → List[List[float]]`
+- **Expose:** `get_completion(prompt: str, system_prompt: str = "") → str`
+- **Expose:** `get_completion_streaming(prompt: str, system_prompt: str = "") → AsyncGenerator[str]` (for SSE)
 
 ### Task 5.2: Create `backend/app/core/text_cleaner.py`
-Establish noise-removal logic (filtering headers, footers, ad placeholders). Accommodate different industries (e.g., removing standard restaurant menu boilerplate vs legal disclaimers).
+Port directly from reference with these additions:
+- Add patterns for cleaning restaurant menus (remove pricing artifacts)
+- Add patterns for cleaning legal documents (remove page headers/footers)
+- Make noise patterns configurable per business (pass `industry` parameter)
 
 ### Task 5.3: Create `backend/app/core/pdf_parser.py`
-Implement `pymupdf4llm` to process documents optimally to Markdown. Standardize OCR fallback approaches using tools like Tesseract.
+Port directly from reference. Key logic:
+1. Try `pymupdf4llm.to_markdown()` first
+2. Fallback to Tesseract OCR for scanned/image PDFs
+3. Run through `text_cleaner.clean_text_for_llm()`
+4. Return `{"content": str, "metadata": dict}`
 
 ### Task 5.4: Create `backend/app/core/scraper.py`
-Build out the web-scraping logic. Maintain strict timeout safety, structured formatting goals, and simple error handling.
+Port from reference (Jina Reader approach). Enhancements:
+- Add timeout handling (30s)
+- Add retry logic (2 retries)
+- Add user-agent rotation
+- Return structured `{"content": str, "metadata": dict}` with proper error messages
 
 ### Task 5.5: Create `backend/app/core/chunker.py`
-Implement `RecursiveCharacterTextSplitter`. Include concurrent LLM enrichment where an asynchronous call asks the AI to 10-word summarize every chunk (benefitting later hybrid searches).
+Port from reference with these enhancements:
+- Keep `MarkdownHeaderTextSplitter` → `RecursiveCharacterTextSplitter` pipeline
+- **Increase** `chunk_size` to 1200 and `chunk_overlap` to 150 (better for pgvector)
+- **Keep** the LLM-powered 10-word summary enrichment (async batch)
+- **Add** `content_hash` generation (MD5 of URL + content) for dedup
+- **Filter** chunks with `MIN_CHUNK_LENGTH = 50`
 
 ### Task 5.6: Create `backend/app/core/ingestor.py`
-Script the pipeline that takes finalized chunks, runs them through the embedder, and `INSERT`s them directly to the `knowledge_chunks` pgvector table.
+Replace ChromaDB upsert with pgvector insert:
+```python
+# Key changes from reference:
+# 1. Instead of ChromaDB collection.upsert(), INSERT INTO knowledge_chunks with ON CONFLICT
+# 2. Embeddings are stored as pgvector vector(1536) type
+# 3. business_id is required for multi-tenant isolation
+# 4. content_hash used for dedup instead of ChromaDB's internal ID
+```
+
+Core function signature:
+```python
+async def ingest_chunks(
+    chunks: List[Dict],
+    business_id: str,
+    source_url: str,
+    source_type: str
+) -> int:  # Returns number of chunks ingested
+```
 
 ### Task 5.7: Create `backend/app/core/searcher.py`
-Define python methods to utilize your hybrid Postgres `search_knowledge` SQL function.
+Replace ChromaDB search with the `search_knowledge` SQL function:
+```python
+# Key changes:
+# 1. Uses the search_knowledge() PostgreSQL function (hybrid semantic + keyword)
+# 2. Adds query expansion via LLM (same as reference)
+# 3. Returns results with combined_score instead of just distance
+# 4. business_id filtering is built into the SQL function
+```
 
 ### Task 5.8: Create `backend/app/core/rag_brain.py`
-Build the final prompt-crafting engine taking context, alerts, business-specific settings, and multi-turn history to supply the main response request.
+Port from reference with these enhancements:
+- **Multi-turn context:** Accept optional `conversation_history` parameter with last 5 messages
+- **Business-aware prompts:** Include business name and custom system prompt from settings
+- **Alert injection:** Same as reference (alerts table instead of JSON file)
+- **Streaming support:** Add `generate_rag_response_streaming()` that yields tokens
+- **Cache check:** Before calling LLM, check `response_cache` table for matching query hash
+- **Confidence scoring:** Same as reference (average relevance of used chunks)
+- **Feedback storage:** Log query + response to `chat_messages` table
 
 ---
 
-### Phase 5 Checklist
-- [ ] Core ingestion scripts behave as expected natively in Python, successfully loading data into pgvector.
-- [ ] Hybrid search can fetch results appropriately.
-- [ ] The RAG script operates properly alongside mock prompts.
+### ✅ Phase 5 Testing Checklist (Backend Only)
+
+Create a test script `backend/test_rag_core.py`:
+```python
+# Test each module independently:
+# 1. llm_router: get_embedding(["test"]) → returns list of 1536-dim vector
+# 2. llm_router: get_completion("Say hello") → returns string
+# 3. text_cleaner: clean("test content with ===== dividers") → cleaned
+# 4. pdf_parser: parse_pdf("test.pdf") → returns content + metadata
+# 5. chunker: process_document("# Title\nContent...") → returns chunks list
+# 6. ingestor: ingest_chunks(test_chunks, test_business_id) → returns count
+# 7. searcher: search_knowledge_base("test query", business_id) → returns results
+# 8. rag_brain: generate_rag_response("What is this?", business_id) → returns answer
+```
+
+- [ ] `python test_rag_core.py` passes all 8 tests
+- [ ] Embeddings are stored in `knowledge_chunks` table in Supabase (verify via dashboard)
+- [ ] Vector search returns relevant results ordered by `combined_score`
+- [ ] LLM generates answers using only provided context (no hallucination)
+- [ ] Cache stores responses and returns cached result on duplicate query
+
+### 🔒 Git Backup
+```bash
+git add -A && git commit -m "Phase 5: RAG engine core - llm_router, chunker, ingestor, searcher, rag_brain (pgvector)"
+```
+
+### 🛑 STOP — Wait for user confirmation before proceeding to Phase 6.
 
 ---
 
@@ -898,23 +1290,77 @@ Build the final prompt-crafting engine taking context, alerts, business-specific
 # ============================================================
 
 ## Objective
-Enable Business Admins to curate their knowledge base sources through an interactive UI.
+Build the knowledge base management system — upload PDFs, scrape URLs, view/edit/delete chunks — for business admins.
 
-### Task 6.1: Complete Endpoints in `backend/app/api/knowledge.py`
-Support file uploads (saving correctly to Supabase bucket), web scraping calls, chunk retrieval/editing routines, and batch removal actions.
+### Task 6.1: Create `backend/app/api/knowledge.py`
+Endpoints (require business admin role):
+- `POST /api/knowledge/{business_id}/upload` — Upload PDF/TXT file → ingest
+- `POST /api/knowledge/{business_id}/scrape` — Scrape URL → ingest
+- `GET /api/knowledge/{business_id}/chunks` — List chunks with pagination, filtering, search
+- `GET /api/knowledge/{business_id}/chunks/{chunk_id}` — Get single chunk
+- `PUT /api/knowledge/{business_id}/chunks/{chunk_id}` — Edit chunk content (re-embed)
+- `DELETE /api/knowledge/{business_id}/chunks/{chunk_id}` — Delete single chunk
+- `DELETE /api/knowledge/{business_id}/chunks/batch` — Delete chunks by source URL (batch)
+- `GET /api/knowledge/{business_id}/sources` — List unique sources (grouped by URL/title)
+- `GET /api/knowledge/{business_id}/stats` — Knowledge base stats (total chunks, by type, storage)
 
-### Task 6.2: Build the `KnowledgeBasePage.jsx` React Component
-Build a powerful portal supporting:
-- Drag-and-drop ingestion paired with manual URL inputs.
-- Source explorers returning interactive table lists.
-- Inline Markdown-friendly chunk editors allowing text cleanup.
+### Task 6.2: File Upload Flow (Backend)
+```
+Client uploads PDF → FastAPI receives file →
+  1. Save to Supabase Storage (uploads/{business_id}/{timestamp}_{filename})
+  2. Parse PDF (pdf_parser.py)
+  3. Clean text (text_cleaner.py)
+  4. Chunk text (chunker.py) — async with LLM enrichment
+  5. Generate embeddings (llm_router.py)
+  6. Insert into knowledge_chunks (ingestor.py)
+  7. Return summary: { chunks_created: N, source_url: "...", title: "..." }
+```
+
+### Task 6.3: Create Business Admin Knowledge Base Pages (Frontend)
+
+#### `frontend/src/pages/business-admin/KnowledgeBasePage.jsx`
+Port the "Manage Database" page from reference `admin_ui.py` (lines 250-422) with these upgrades:
+- **Upload Zone:** Drag-and-drop area for PDFs + URL input field (side by side)
+- **Progress indicator:** Show real-time progress during ingestion (uploading → parsing → chunking → embedding → done)
+- **Source Explorer:** Group chunks by source (URL/filename), expandable cards
+- **Chunk Viewer:** Display chunk content with syntax highlighting for markdown
+- **Inline Editor:** Click "Edit" → textarea with "Save & Re-Embed" button (same as reference)
+- **Find & Replace:** Same as reference (lines 374-385) — search text within chunk and replace
+- **Filters:** Source type dropdown + date range picker + keyword search (same as reference)
+- **Pagination:** Dropdown page selector (same as reference)
+- **Batch Delete:** Select multiple sources → delete all their chunks at once
+
+> [!TIP]
+> The reference project's database explorer (lines 250-422 of admin_ui.py) has excellent UX patterns.
+> Port the grouping-by-source, pagination, and inline editing features but use React components.
+> Replace Streamlit's `st.expander` with collapsible `<details>` or a custom accordion component.
+> Replace `st.text_area` with a `<textarea>` that has line numbers and a markdown preview toggle.
 
 ---
 
-### Phase 6 Checklist
-- [ ] Front-to-back testing of an uploaded PDF returns organized chunks in the business's database profile.
-- [ ] URL processing is fully functional.
-- [ ] Chunks can be successfully individually pruned or batch deleted.
+### ✅ Phase 6 Testing Checklist
+
+#### Manual Tests:
+- [ ] Upload a PDF → chunks appear in database explorer within 30 seconds
+- [ ] Upload a TXT file → chunks appear correctly
+- [ ] Scrape a URL (e.g., any public webpage) → chunks ingested
+- [ ] View ingested chunks grouped by source
+- [ ] Click "Edit" on a chunk → text area opens with content
+- [ ] Modify chunk text → click "Save & Re-Embed" → embedding updates in DB
+- [ ] Use Find & Replace → replaces text within chunk correctly
+- [ ] Delete single chunk → disappears from list
+- [ ] Delete all chunks for a source → entire source group disappears
+- [ ] Filter by source type (PDF/Web) → correctly filters
+- [ ] Keyword search → finds chunks containing the search term
+- [ ] Pagination works (5 sources per page)
+- [ ] Upload duplicate PDF → no duplicate chunks created (content_hash dedup)
+
+### 🔒 Git Backup
+```bash
+git add -A && git commit -m "Phase 6: Knowledge base management (upload, scrape, edit, delete, search)"
+```
+
+### 🛑 STOP — Wait for user confirmation before proceeding to Phase 7.
 
 ---
 
@@ -923,24 +1369,95 @@ Build a powerful portal supporting:
 # ============================================================
 
 ## Objective
-Equip businesses with monitoring and analytics capabilities.
+Build the complete Business Admin Dashboard with sidebar navigation, mirroring all features from the reference project's admin_ui.py but enhanced for multi-tenant.
 
-### Task 7.1: Build `backend/app/api/business_admin.py`
-Create pathways for updating core business behavior settings, purging caches, and extracting usage analytics across chat histories.
+### Task 7.1: Create `backend/app/api/business_admin.py`
+Endpoints:
+- `GET /api/business/{business_id}` — Get business details + stats
+- `PUT /api/business/{business_id}/settings` — Update business settings
+- `GET /api/business/{business_id}/analytics` — Dashboard analytics (query volume, confidence distribution, top queries, API cost estimate)
+- `GET /api/business/{business_id}/chat-logs` — Chat history with pagination + filters
+- `GET /api/business/{business_id}/failed-queries` — Failed/low-confidence queries
+- `POST /api/business/{business_id}/alerts` — Create emergency alert
+- `GET /api/business/{business_id}/alerts` — List alerts
+- `DELETE /api/business/{business_id}/alerts/{alert_id}` — Remove alert
+- `DELETE /api/business/{business_id}/cache` — Purge response cache
 
-### Task 7.2: Develop Business Admin Component Collection
-Build dedicated pages in the `business-admin` route for:
-- Chat Debugging (Simulating requests and viewing confidence indicators directly).
-- Actioning Emergency Alerts.
-- Evaluating Analytical statistics like "Most Asked Questions" and usage metrics over time.
-- Customizing global business settings including primary brand colors and behavior profiles.
+### Task 7.2: Create Business Admin Layout
+`frontend/src/pages/business-admin/BusinessAdminLayout.jsx`:
+- Sidebar with business name + logo at top
+- Navigation sections:
+  1. 💬 **Chat (Admin Test)** — Test the RAG as a user would
+  2. 📚 **Knowledge Base** — Upload, manage chunks (from Phase 6)
+  3. 🚨 **Emergency Alerts** — Broadcast alerts (from reference)
+  4. 📊 **Analytics & QC** — Dashboard analytics (from reference)
+  5. ⚙️ **Settings** — Business configuration
+
+### Task 7.3: Admin Chat Test Page
+`frontend/src/pages/business-admin/AdminChatPage.jsx`:
+- Same chat interface as user portal but with additional debug info:
+  - Show confidence score color-coded (green/orange/red)
+  - Show cited sources in expandable section
+  - Show "chunks used" count
+  - Show response time in milliseconds
+
+### Task 7.4: Emergency Alerts Page
+`frontend/src/pages/business-admin/AlertsPage.jsx`:
+Port from reference `admin_ui.py` (lines 424-474):
+- Text input to create new alert
+- List of active alerts with "Remove" button
+- Cache management section with "Purge Cache" button
+
+### Task 7.5: Analytics & Quality Control Page
+`frontend/src/pages/business-admin/AnalyticsPage.jsx`:
+Port from reference `admin_ui.py` (lines 476-537) with enhancements:
+- **Stats cards:** Total Queries, Failed Queries, API Cost Estimate, Avg Confidence
+- **Charts** (use a lightweight library like `recharts`):
+  - Queries over time (line chart, last 30 days)
+  - Confidence distribution (bar chart)
+  - Top 10 most asked questions (horizontal bar)
+- **Failed queries log:** Table with pagination (same as reference)
+- **Chat history browser:** Expandable log entries (same as reference)
+- **Purge logs button**
+
+### Task 7.6: Business Settings Page
+`frontend/src/pages/business-admin/SettingsPage.jsx`:
+- Edit business name, description, industry
+- Upload logo (via Supabase Storage)
+- Toggle: Require user login for chat
+- Custom welcome message
+- Custom system prompt (override default RAG prompt)
+- Primary brand color
+- Max chunks per query
+- Confidence threshold slider
+- **Danger zone:** Deactivate business, purge all data
 
 ---
 
-### Phase 7 Checklist
-- [ ] Emergency Alerts correctly route responses in test simulations.
-- [ ] Analytics graphs populate based on dummy message data.
-- [ ] Changes to brand configurations correctly update database rules.
+### ✅ Phase 7 Testing Checklist
+
+#### Manual Tests:
+- [ ] Navigate to `/b/{slug}/admin` → Business admin dashboard loads
+- [ ] Sidebar shows all 5 navigation items
+- [ ] Admin Chat: Ask a question → get RAG-powered response with confidence score
+- [ ] Admin Chat: Confidence color is correct (green > 0.3, orange > 0.15, red < 0.15)
+- [ ] Emergency Alerts: Create an alert → appears in active list
+- [ ] Emergency Alerts: Ask a question related to alert → alert content is prioritized in response
+- [ ] Emergency Alerts: Remove alert → disappears from list
+- [ ] Emergency Alerts: Purge cache → success message
+- [ ] Analytics: Stats cards show correct numbers
+- [ ] Analytics: Failed queries table shows low-confidence queries
+- [ ] Analytics: Chat history shows paginated log entries
+- [ ] Settings: Change welcome message → reflected in user chat portal
+- [ ] Settings: Toggle "Require login" → user portal now requires auth
+- [ ] Settings: Update brand color → user portal uses new color
+
+### 🔒 Git Backup
+```bash
+git add -A && git commit -m "Phase 7: Business Admin Dashboard (chat test, alerts, analytics, settings)"
+```
+
+### 🛑 STOP — Wait for user confirmation before proceeding to Phase 8.
 
 ---
 
@@ -949,38 +1466,170 @@ Build dedicated pages in the `business-admin` route for:
 # ============================================================
 
 ## Objective
-Develop the end-user public chat implementation matching respective business branding and functionality rules.
+Build the public-facing chat interface where end users interact with the business's RAG chatbot. This is the equivalent of the reference project's `chat_ui.py` — but as a full React SPA with streaming responses.
 
-### Task 8.1: Construct `backend/app/api/chat.py`
-Ensure Chat routes are properly mapped and include robust features like the Server-Sent Event (SSE) model for token-by-token response streaming.
+### Task 8.1: Create `backend/app/api/chat.py`
+Endpoints:
+- `POST /api/chat/{business_slug}/message` — Send a message, get RAG response
+  - Accept: `{ message: str, conversation_id?: str, session_id?: str }`
+  - Return: `{ answer: str, confidence: float, sources: [], conversation_id: str }`
+- `GET /api/chat/{business_slug}/stream` — SSE endpoint for streaming responses
+  - Same input, but returns `text/event-stream` with token-by-token output
+- `GET /api/chat/{business_slug}/conversations` — List user's conversations (if authenticated)
+- `GET /api/chat/{business_slug}/conversations/{conv_id}/messages` — Get conversation history
+- `GET /api/chat/{business_slug}/info` — Get business public info (name, welcome message, branding, login required)
+- `GET /api/chat/{business_slug}/alerts` — Get active alerts for this business
 
-### Task 8.2: Build the Chat API Lifecycle Pipeline
-Connect the entire workflow: Verify business active state -> optionally validate Session/JWT Auth -> test Cache hit -> run Semantic/Keyword search context builder -> Stream response out and log results natively.
+### Task 8.2: Chat API Logic
+```
+User sends message →
+  1. Validate business exists and is active (by slug)
+  2. Check if login required (business settings) — if yes, validate JWT
+  3. Check response cache (query_hash + business_id) — if hit, return cached
+  4. Check active alerts — if any match query context, inject into prompt
+  5. Load last 5 messages from conversation (if conversation_id provided)
+  6. Search knowledge base (hybrid: semantic + keyword via search_knowledge function)
+  7. Build RAG prompt with context + conversation history + alerts
+  8. Call Azure OpenAI (streaming or non-streaming)
+  9. Log message pair to chat_messages table
+  10. Cache the response (24hr TTL)
+  11. Return response
+```
 
-### Task 8.3: Construct the Chat UI Panel
-Model `ChatPortal.jsx` similar to leading AI chatbots but inheriting visual aesthetics from the specific database entry (Business color configurations, dynamically populated Welcome messaging, etc.). Establish logic handling threaded conversations natively in history sidebars.
+### Task 8.3: Create User Chat Portal (Frontend)
+`frontend/src/pages/chat/ChatPortal.jsx`:
+
+Route: `/b/:slug`
+
+**Layout:**
+- Full-screen chat layout (like ChatGPT/Claude UI)
+- Business branding header (logo + name + custom color)
+- Active alerts banner (red, dismissible per session)
+- Chat messages area (scrollable, auto-scroll to bottom)
+- Message input bar at bottom (textarea + send button)
+
+**Features:**
+- **Streaming responses:** Use `EventSource` API to display tokens as they arrive
+- **Confidence indicator:** Small colored dot next to each response
+- **Source citations:** "View Sources" button below response → expandable panel
+- **Conversation history:** Sidebar (collapsible) showing past conversations (if logged in)
+- **New conversation:** Button to start fresh thread
+- **Welcome message:** Show business's custom welcome message on empty state
+- **Responsive:** Works on mobile (sidebar hidden, chat takes full width)
+- **Typing indicator:** Animated dots while waiting for response
+
+> [!TIP]
+> **Design for Chat Portal:**
+> - Clean, minimal design (the business's content should be the focus)
+> - Use the business's `primary_color` from settings for accents
+> - User messages: Right-aligned, colored bubble
+> - Assistant messages: Left-aligned, white/light bubble
+> - Smooth message entry animation (fade-in + slide-up)
+> - Input bar: Sticky at bottom, subtle shadow, auto-resize textarea
+> - Show "Powered by RAG Factory" watermark at bottom (subtle)
+
+### Task 8.4: Optional Auth Gate
+If business settings have `user_login_required: true`:
+- Show a login/signup form before the chat
+- Use same Supabase Auth (shared auth system)
+- Store `user_id` with messages for tracking
+- If `user_login_required: false`:
+  - Generate a random `session_id` (UUID stored in localStorage)
+  - Associate messages with session_id for conversation continuity
+
+### Task 8.5: Mobile Responsive Design
+- Test and optimize for mobile viewport (<768px)
+- Conversation sidebar becomes a slide-out drawer
+- Input bar stays at bottom (above keyboard on mobile)
+- Messages use smaller font on mobile
 
 ---
 
-### Phase 8 Checklist
-- [ ] Chat responds accurately based on context injected from the business's specific RLS-isolated chunk data.
-- [ ] Token streaming presents a smooth and stable UI visual.
-- [ ] Optional auth gating rules appropriately trap or permit external visitors.
+### ✅ Phase 8 Testing Checklist
+
+#### Manual Tests:
+- [ ] Navigate to `/b/{slug}` → Chat portal loads with business branding
+- [ ] Welcome message displays on empty chat
+- [ ] Type a question → response appears (based on ingested knowledge)
+- [ ] Confidence score displays with correct color
+- [ ] "View Sources" shows the source URLs used
+- [ ] Create an emergency alert (via admin) → banner appears in chat portal
+- [ ] Ask alert-related question → response prioritizes alert content
+- [ ] Send multiple messages → conversation context is maintained
+- [ ] Start new conversation → fresh thread, no old context
+- [ ] If login required: unauthenticated user sees login form
+- [ ] If login NOT required: anonymous user can chat freely
+- [ ] Streaming: tokens appear one-by-one (not blocked until complete)
+- [ ] Mobile: chat works on phone-width viewport
+- [ ] Ask same question twice → second response is faster (cached)
+- [ ] Ask question with no relevant knowledge → "I don't have enough information" response
+
+### 🔒 Git Backup
+```bash
+git add -A && git commit -m "Phase 8: User Chat Portal (streaming, conversations, alerts, responsive)"
+```
+
+### 🛑 STOP — Wait for user confirmation before proceeding to Phase 9.
 
 ---
 
 # ============================================================
-# PHASE 9: INTEGRATION & BUG FIXING
+# PHASE 9: INTEGRATION TESTING & BUG FIXES
 # ============================================================
 
 ## Objective
-End-to-End stress testing and ensuring the production-ready state of the environment.
+End-to-end testing of the complete flow from business creation to user chat. Fix all bugs discovered.
 
-### Task 9.1: Comprehensive End-to-End Audit
-Have team members step through the process: Login -> Make Business -> Populate Business Sandbox -> Make user queries matching edge cases -> Analyze dashboard reporting results.
+### Task 9.1: Full Integration Test Scenario
 
-### Task 9.2: Technical Cleanups
-Resolve any noted console errors, manage memory handling for long-running context chains in the frontend widget UI, ensure browser history tracking handles SPA routing beautifully, and optimize initial render speeds over CORS.
+Execute this test script manually:
+
+1. **Login as Super Admin** → Dashboard loads
+2. **Create Business:** "Sydney Burgers" (industry: Restaurant)
+3. **Navigate to Business Admin:** `/b/sydney-burgers/admin`
+4. **Upload Knowledge:**
+   - Upload a PDF (any test PDF with content)
+   - Scrape a URL (any public restaurant menu page)
+   - Verify chunks appear in Knowledge Base explorer
+5. **Test Admin Chat:**
+   - Ask: "What items are on the menu?" → should get relevant answer
+   - Check confidence score is reasonable
+6. **Create Emergency Alert:** "We are closed today due to renovations"
+7. **Test User Portal:** Open `/b/sydney-burgers` in incognito window
+   - Ask: "Are you open today?" → should mention the emergency alert
+   - Ask: "What's on the menu?" → should use knowledge base
+   - Verify sources are cited
+8. **Check Analytics:** Go back to admin → analytics shows the queries
+9. **Test another business:**
+   - Create "UTS University" (industry: Education)
+   - Upload different knowledge
+   - Verify data isolation: UTS chat doesn't return Sydney Burgers content
+
+### Task 9.2: Bug Fix Checklist
+- [ ] No CORS errors in browser console
+- [ ] No unhandled promise rejections
+- [ ] Auth token is refreshed before expiry (Supabase auto-refresh)
+- [ ] File uploads > 10MB work without timeout
+- [ ] Unicode content in PDFs/web pages is handled correctly
+- [ ] Empty knowledge base returns graceful "no info" message (not error)
+- [ ] Deleting a business doesn't leave orphan data (CASCADE works)
+- [ ] Concurrent uploads don't cause race conditions
+- [ ] Browser back button works correctly with router
+
+### Task 9.3: Performance Checks
+- [ ] Knowledge base search responds in < 2 seconds
+- [ ] Chat response (non-streaming) completes in < 5 seconds
+- [ ] Dashboard with 100+ chunks loads in < 3 seconds
+- [ ] No memory leaks in long chat sessions (check React DevTools)
+
+---
+
+### 🔒 Git Backup
+```bash
+git add -A && git commit -m "Phase 9: Integration testing and bug fixes"
+```
+
+### 🛑 STOP — Wait for user confirmation before proceeding to Phase 10.
 
 ---
 
@@ -989,44 +1638,268 @@ Resolve any noted console errors, manage memory handling for long-running contex
 # ============================================================
 
 ## Objective
-Distribute the application logically so client platforms can place RAG chatbots directly on their own landing properties.
+Create a JavaScript widget that businesses can embed on their own external websites to provide the RAG chatbot.
 
-### Task 10.1: Assemble `widget.js` and `widget.css`
-Formulate a lightweight standalone script targeting `<div id="chat-widget">` objects, mounting a styled chat bubble that spawns an iframe or shadow-dom communication link back to the FastAPI instance endpoints.
+### Task 10.1: Create `widget/widget.js`
+A standalone JavaScript file that:
+1. Creates an iframe or shadow DOM container
+2. Renders a chat bubble (floating button, bottom-right corner)
+3. On click: Opens a chat panel (same UI as user portal, embedded)
+4. Communicates with the RAG Factory API via business slug
+5. Auto-detects business branding (color, welcome message) from API
 
-### Task 10.2: Provide Generator Toolkit
-Include logic inside the Business Admin to automatically populate accurate HTML snippet generation strings so businesses easily implement integration codes.
+### Task 10.2: Create Embed Code Generator
+In Business Admin Settings, add a section:
+```
+📋 Embed Chat Widget on Your Website
+Copy this code and paste it before the </body> tag:
+
+<script src="https://your-domain.com/widget/widget.js" data-business="sydney-burgers"></script>
+```
+
+### Task 10.3: Widget Styling (`widget/widget.css`)
+- Chat bubble: 60px circle, business primary color, chat icon, pulse animation
+- Chat panel: 400px × 600px, fixed bottom-right, rounded corners, shadow
+- Close button (X) in top-right of panel
+- Same chat UI as user portal but compact
+
+---
+
+### ✅ Phase 10 Testing Checklist
+- [ ] Include widget script in a simple HTML file → chat bubble appears
+- [ ] Click bubble → chat panel opens
+- [ ] Send message → gets RAG response from correct business
+- [ ] Close panel → bubble returns to normal state
+- [ ] Widget uses business brand color
+- [ ] Multiple widgets on same page (different businesses) work independently
+
+### 🔒 Git Backup
+```bash
+git add -A && git commit -m "Phase 10: Embeddable chat widget"
+```
+
+### 🛑 STOP — Wait for user confirmation before proceeding to Phase 11.
 
 ---
 
 # ============================================================
-# PHASE 11: UI POLISHING
+# PHASE 11: POLISH, ANIMATIONS & FINAL UI PASS
 # ============================================================
 
 ## Objective
-Refine the UX experience targeting optimal visual flow.
+Final UI/UX polish pass — add micro-animations, loading states, error boundaries, and ensure visual consistency.
 
-### Task 11.1: Standardize Load states & Error Boundaries
-Deploy comprehensive skeleton loaders, reliable retry boundaries for unexpected faults, and clean user-notification toast messaging for API events (both successes and failures).
+### Task 11.1: Loading States
+- All pages: Show skeleton loader (Tailwind `animate-pulse`) while data loads
+- File upload: Progress bar with percentage
+- Chat: Typing indicator animation (3 bouncing dots)
+- Business creation: Spinner inside submit button
 
-### Task 11.2: Polish Micro-Animations and Accessibility (a11y)
-Add transition lifecycles on modals, hover feedback on components, and complete a deep WCAG accessibility scan ensuring navigation outlines and contrast standards are optimal throughout.
+### Task 11.2: Error Boundaries
+- Create `ErrorBoundary.jsx` React component
+- Wrap all page components
+- Show friendly error message + "Retry" button
+- Log errors to console (and optionally to a Supabase `error_logs` table)
+
+### Task 11.3: Toast Notifications
+- Create a toast component (bottom-right, auto-dismiss after 3s)
+- Success: Green border, checkmark icon
+- Error: Red border, X icon
+- Info: Blue border, info icon
+- Use for: CRUD operations, auth actions, ingestion completion
+
+### Task 11.4: Micro-Animations (CSS)
+- Page transitions: Fade-in (opacity 0→1, 200ms)
+- Card hover: Lift + shadow (transform, box-shadow, 150ms)
+- Button press: Scale down (transform: scale(0.98), 100ms)
+- Sidebar nav: Active item slide indicator
+- Chat messages: Slide-in from bottom (transform: translateY, 200ms)
+- Modal: Backdrop fade + content scale-in
+
+### Task 11.5: Accessibility Pass
+- All interactive elements have proper `aria-label`
+- Focus visible indicators (outline) on tab navigation
+- Color contrast meets WCAG AA (check with browser DevTools)
+- Form inputs have associated `<label>` elements
+
+### Task 11.6: Responsive Final Check
+Test all pages at these breakpoints:
+- Desktop: 1440px, 1280px, 1024px
+- Tablet: 768px
+- Mobile: 375px, 320px
+
+---
+
+### 🔒 Git Backup
+```bash
+git add -A && git commit -m "Phase 11: UI polish, animations, error handling, accessibility"
+```
+
+### 🛑 STOP — Wait for user confirmation before proceeding to Phase 12.
 
 ---
 
 # ============================================================
-# PHASE 12: DOCUMENTATION DEPLOYMENT STANDARDS
+# PHASE 12: DOCUMENTATION & DEPLOYMENT PREP
 # ============================================================
 
 ## Objective
-Prepare to host and maintain the implementation effectively.
+Write documentation, create production configs, and prepare for deployment.
 
-### Task 12.1: Finalize README Architecture Plans
-Document environment builds, architecture graphs, and developer contribution setups strictly.
+### Task 12.1: Create `README.md`
+Professional README with:
+- Project overview + screenshots
+- Architecture diagram (Mermaid)
+- Tech stack table
+- Getting Started guide (step by step)
+- Environment variables reference
+- API documentation link (FastAPI auto-generates this at `/docs`)
+- Deployment guide (local + Oracle Linux VPS)
+- Contributing guidelines
 
-### Task 12.2: Establish API documentation and Prod Environments
-Ensure FastAPI's automatic swagger endpoints represent actual payload assumptions properly. Formulate production restriction configurations for rate limits to prevent exploitation, finalize Docker deployment blueprints or CI/CD runner workflows.
+### Task 12.2: API Documentation
+FastAPI auto-generates Swagger at `/docs` and ReDoc at `/redoc`.
+- Add docstrings to all endpoints
+- Add request/response examples in Pydantic models
+- Group endpoints by tag (Auth, Super Admin, Business, Chat, Knowledge)
+
+### Task 12.3: Production Configuration
+Create `backend/app/config_prod.py`:
+- HTTPS enforcement
+- Rate limiting (per IP, per business)
+- Logging configuration (structured JSON logs)
+- CORS restricted to production domain
+
+### Task 12.4: Docker Setup (Optional, for VPS)
+Create `docker-compose.yml`:
+```yaml
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file: ./backend/.env
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+```
+
+Create `backend/Dockerfile` and `frontend/Dockerfile` (Nginx serving built React).
+
+### Task 12.5: Health Check Endpoints
+- `GET /api/health` — Basic health
+- `GET /api/health/db` — Database connectivity
+- `GET /api/health/llm` — Azure OpenAI connectivity
+- `GET /api/health/storage` — Supabase Storage connectivity
 
 ---
 
-Great work! Completing these stages correctly delivers a highly capable framework positioned powerfully for external cloud deployments and robust scaling.
+### ✅ Phase 12 Testing Checklist
+- [ ] README renders correctly on GitHub
+- [ ] API docs accessible at `/docs` with all endpoints documented
+- [ ] Health check endpoints pass (all return "healthy")
+- [ ] (If Docker): `docker-compose up` starts both services
+
+### 🔒 Git Backup
+```bash
+git add -A && git commit -m "Phase 12: Documentation, deployment prep, and Docker config"
+```
+
+### 🛑 STOP — Final review with user.
+
+---
+
+# ============================================================
+# APPENDIX A: KEY DESIGN DECISIONS
+# ============================================================
+
+## Why pgvector over ChromaDB?
+- ChromaDB runs as a separate process, needs its own data directory per tenant
+- pgvector runs inside PostgreSQL (already have Supabase), zero additional infrastructure
+- HNSW indexes in pgvector provide fast approximate nearest neighbor search
+- Full-text search (BM25) is native to PostgreSQL — enables hybrid search
+- RLS (Row Level Security) provides automatic multi-tenant data isolation
+- Backups, scaling, and replication are handled by Supabase
+
+## Why React + Vite over Streamlit?
+- Streamlit cannot handle multiple tenants/routes in a single app
+- Streamlit has limited control over styling, layout, and navigation
+- React provides full SPA routing (Super Admin ↔ Business Admin ↔ User Chat)
+- Vite is the fastest build tool for React, with HMR (Hot Module Replacement)
+- shadcn/ui-inspired components give a premium, customizable look
+
+## Why SSE Streaming?
+- WebSockets are overkill for one-directional token streaming
+- SSE (Server-Sent Events) is simpler, works with HTTP/2, auto-reconnects
+- FastAPI supports SSE natively via `sse-starlette` package
+- Frontend uses standard `EventSource` API (no library needed)
+
+## Why Hybrid Search (Semantic + Keyword)?
+- Pure semantic search misses exact keyword matches (e.g., filename "Profile.pdf")
+- Pure keyword search misses semantic similarity (e.g., "exam dates" → "assessment schedule")
+- Combining 70% semantic + 30% keyword score gives best-of-both-worlds
+- The reference project only used semantic search — this is a key accuracy improvement
+
+---
+
+# ============================================================
+# APPENDIX B: ENVIRONMENT SETUP REFERENCE
+# ============================================================
+
+## Required API Keys & Services
+| Service | Where to Get | Free Tier? |
+|---|---|---|
+| Supabase | [supabase.com](https://supabase.com) | ✅ Yes (generous) |
+| Azure OpenAI | [Azure Portal](https://portal.azure.com) | ❌ (Student credits work) |
+| Jina Reader | No key needed (free API) | ✅ Yes |
+| Tesseract OCR | System install | ✅ Yes (open source) |
+
+## System Requirements
+- Python 3.10+
+- Node.js 18+
+- Git
+- Tesseract OCR (for scanned PDF support)
+  - Windows: [Install from GitHub](https://github.com/UB-Mannheim/tesseract/wiki)
+  - Linux: `sudo apt-get install tesseract-ocr`
+  - Mac: `brew install tesseract`
+
+---
+
+# ============================================================
+# APPENDIX C: CURSOR AI SPECIFIC TIPS
+# ============================================================
+
+## Recommended Cursor Settings for This Project:
+1. **MCP Servers:**
+   - Add Supabase MCP: `npx -y @supabase/mcp-server-supabase@latest` (for DB migrations)
+   - This lets you run SQL migrations directly from Cursor
+
+2. **Context Management:**
+   - Use `@codebase` when asking about cross-module dependencies
+   - Use `@file` to reference specific files when porting from the reference project
+   - Use `@web` to look up PostgreSQL/pgvector syntax if unsure
+   - Pin `backend/app/config.py` and `backend/app/dependencies.py` as always-open files
+
+3. **Composer Usage:**
+   - Use Composer (Ctrl+I) for multi-file edits within a phase
+   - For each phase, start a new Composer session with this context:
+     ```
+     @STEPS.md (the relevant phase section)
+     @file backend/app/config.py
+     @file backend/app/dependencies.py
+     ```
+
+4. **Debugging Tips:**
+   - FastAPI errors: Check the terminal running `uvicorn` for tracebacks
+   - React errors: Check browser DevTools console
+   - Supabase RLS errors: Test queries in Supabase SQL Editor with `SET ROLE authenticated; SET request.jwt.claims = '{"sub":"user-id"}';`
+   - pgvector errors: Make sure embedding dimensions match (1536 for text-embedding-3-small)
+
+5. **Code Style:**
+   - Python: Use type hints everywhere, async where possible
+   - React: Functional components only, hooks for state
+   - CSS: Tailwind utility classes, custom CSS only for animations
+   - Naming: snake_case for Python, camelCase for JavaScript, kebab-case for CSS classes
