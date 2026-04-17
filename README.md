@@ -116,7 +116,7 @@ RAG-Factory/
 |---|---|---|
 | 0 | Project scaffold & environment | Done |
 | 1 | Supabase schema, pgvector, RLS | Migrations in repo — apply to hosted DB |
-| 2 | Backend foundation | Pending |
+| 2 | Backend foundation (config, Supabase clients, deps, logging) | Done |
 | 3 | Authentication | Pending |
 | 4 | Super Admin Dashboard | Pending |
 | 5 | RAG engine core | Pending |

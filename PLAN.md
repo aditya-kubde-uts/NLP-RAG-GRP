@@ -8,13 +8,13 @@
 
 ## Status
 
-**Overall:** `1 / 13` phases complete  _(Phase 0 through Phase 12)_
+**Overall:** `3 / 13` phases complete  _(Phase 0 through Phase 12; Phase 1 DB apply is on you)_
 
 | # | Phase | Status |
 |---|---|---|
 | 0 | Project Init & Env | [x] |
 | 1 | Supabase Schema + RLS + pgvector | [~] |
-| 2 | Backend Foundation | [ ] |
+| 2 | Backend Foundation | [x] |
 | 3 | Authentication | [ ] |
 | 4 | Super Admin Dashboard | [ ] |
 | 5 | RAG Engine Core | [ ] |
@@ -469,48 +469,37 @@ Manual (after 1.4 succeeds):
 
 ---
 
-### Phase 2 — Backend Foundation  `[ ]`
+### Phase 2 — Backend Foundation  `[x]`
 
 **Objective.** FastAPI app with config, Supabase clients, auth dependencies, structured logging, health endpoint.
 
-**Prereqs:** `[ ]` Phase 1 complete.
+**Prereqs:** `[x]` Phase 0 complete · `[~]` Phase 1 (schema applied on hosted DB).
 
 #### Tasks
 
-- `[ ]` 2.1 `app/config.py` (Pydantic `BaseSettings`)
-  - `[ ]` Load all env vars from STEPS.md Phase 2.1
-  - `[ ]` `get_settings()` with `@lru_cache()`
-- `[ ]` 2.2 `app/db/supabase_client.py`
-  - `[ ]` `supabase` (anon, RLS-respecting)
-  - `[ ]` `supabase_admin` (service role, RLS-bypass)
-- `[ ]` 2.3 `app/dependencies.py`
-  - `[ ]` `get_current_user` (JWT validation via Supabase)
-  - `[ ]` `require_super_admin`
-  - `[ ]` `require_business_admin(business_id)`
-  - `[ ]` `get_optional_user`
-- `[ ]` 2.4 `app/logging.py` — structlog JSON, correlation IDs per request
-- `[ ]` 2.5 `app/main.py`
-  - `[ ]` FastAPI instance + CORS middleware
-  - `[ ]` Request-ID middleware (propagate into structlog context)
-  - `[ ]` `GET /api/health`
-  - `[ ]` Router stubs (commented) for future phases
+- `[x]` 2.1 `app/config.py` (Pydantic v2 `Settings` + `get_settings()` + `lru_cache`)
+- `[x]` 2.2 `app/db/supabase_client.py` — `supabase` + `supabase_admin`
+- `[x]` 2.3 `app/dependencies.py` — `get_current_user`, `require_super_admin`, `require_business_admin(business_id)`, `get_optional_user`
+- `[x]` 2.3b `app/errors.py` — structured `{"error":{code,message,details?}}` via `HTTPException` handler
+- `[x]` 2.4 `app/logging.py` — structlog (JSON non-TTY, console TTY)
+- `[x]` 2.5 `app/main.py` — CORS, `X-Request-ID` middleware, lifespan (logging + supabase import), `/api/health`, `/api/health/db`, global exception handler, commented router stubs
 
 #### Testing
 
 Automated:
-- `[ ]` `tests/test_config.py` — loads `.env.test` fixture, asserts all required keys
-- `[ ]` `tests/test_dependencies.py` — mocked `supabase.auth.get_user`, covers all four deps (valid / invalid / missing)
-- `[ ]` `tests/test_main.py` — `/api/health` returns 200 `{"status":"healthy"}`
+- `[x]` `tests/test_config.py`
+- `[x]` `tests/test_dependencies.py` (mocked Supabase auth)
+- `[x]` `tests/test_main.py` — OpenAPI + `/api/health` + `/api/health/db` shape
+- `[x]` `backend/.env.test` + conftest load order
 
 Manual:
-- `[ ]` `uv run uvicorn app.main:app --reload --port 8000` starts clean
-- `[ ]` `/docs` Swagger loads
-- `[ ]` Wrong JWT → 401 with structured JSON error
+- `[ ]` `uv run uvicorn app.main:app --reload --port 8000` — verify locally with real `.env`
+- `[ ]` Wrong JWT on a protected route — deferred to Phase 3 (no auth routes yet)
 
 #### Definition of Done
 
-- `[ ]` All tests green, `ruff check` passes
-- `[ ]` `git add -A && git commit -m "Phase 2: FastAPI skeleton, Supabase client, auth dependencies"`
+- `[x]` All tests green, `ruff check` passes
+- `[x]` Git commit + push on `main`
 
 ---
 
@@ -518,7 +507,7 @@ Manual:
 
 **Objective.** Auth API routes + React auth context + protected routes.
 
-**Prereqs:** `[ ]` Phase 2 complete.
+**Prereqs:** `[x]` Phase 2 complete.
 
 #### Tasks
 

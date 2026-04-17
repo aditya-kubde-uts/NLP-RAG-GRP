@@ -26,10 +26,26 @@ uv run ruff check .
 uv run ruff format .
 ```
 
-API docs: <http://localhost:8000/docs>
-Health check: <http://localhost:8000/api/health>
+API docs: <http://localhost:8000/docs> · OpenAPI JSON: <http://localhost:8000/openapi.json>
+
+Health checks:
+
+- <http://localhost:8000/api/health> — process liveness
+- <http://localhost:8000/api/health/db> — `SELECT 1` against `DATABASE_URL` (503 if DB unreachable)
 
 See [../PLAN.md](../PLAN.md) and [../STEPS.md](../STEPS.md) for the full project plan.
+
+### Phase 2 modules
+
+| Module | Role |
+|--------|------|
+| `app/config.py` | Pydantic `Settings` + `get_settings()` |
+| `app/logging.py` | structlog |
+| `app/errors.py` | `api_error()` → JSON `{"error":{code,message,...}}` |
+| `app/db/supabase_client.py` | `supabase` (anon) + `supabase_admin` (service role) |
+| `app/dependencies.py` | `get_current_user`, `require_super_admin`, `require_business_admin`, `get_optional_user` |
+
+Tests load [`.env.test`](.env.test) first (see `tests/conftest.py`).
 
 ---
 
