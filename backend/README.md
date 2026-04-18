@@ -47,6 +47,31 @@ See [../PLAN.md](../PLAN.md) and [../STEPS.md](../STEPS.md) for the full project
 
 Tests load [`.env.test`](.env.test) first (see `tests/conftest.py`).
 
+### Phase 3–5 modules
+
+| Module | Role |
+|--------|------|
+| `app/api/auth.py` | `POST /api/auth/{signup,login,logout}`, `GET /api/auth/me` |
+| `app/api/super_admin.py` | Super-admin platform ops: list/create/update/deactivate businesses, stats, **invite Business Admin by email**, list/remove admins |
+| `app/api/business_admin.py` | Business-admin tenant ops: `GET /api/business/{id}`, `PUT /api/business/{id}` (name/description/industry/settings — deep-merged) |
+| `app/services/users.py` | `create_or_get_admin_user(email, password?, full_name?)` — provisions or finds a Supabase auth user via the admin API (`email_confirm=true`); returns one-time credentials on first create |
+| `app/models/business.py` | `BusinessCreate` (with optional `admin_email/password/full_name`), `BusinessAdminInvite`, `BusinessAdminSummary`, `AdminCredentials`, `BusinessCreateResponse` |
+| `app/core/*` | RAG engine: `llm_router`, `text_cleaner`, `pdf_parser`, `scraper`, `chunker`, `ingestor`, `searcher`, `rag_brain` (Azure OpenAI + pgvector + hybrid search + streaming) |
+
+### Per-business-admin ownership model (Phase 4)
+
+- **Super Admin** creates a business and optionally provides `admin_email` / `admin_password` / `admin_full_name`. The backend then:
+  1. Calls `supabase_admin.auth.admin.create_user({... email_confirm: true})` (or looks up the existing user if the email already has an account).
+  2. Inserts the `businesses` row with `owner_id = <admin user's id>` (NOT the super admin).
+  3. Inserts a single `business_members` row with role `admin` for the assigned user.
+  4. Returns `BusinessCreateResponse` with a one-time `admin` payload (email + password + `was_created` flag).
+- **Invite-admin-by-email endpoints** allow the same flow on existing businesses:
+  - `GET    /api/super-admin/businesses/{id}/admins` — list admins with `email`, `full_name`, `role`, `created_at`.
+  - `POST   /api/super-admin/businesses/{id}/admins` — body `{ email, password?, full_name?, role? }` → returns `AdminCredentials`.
+  - `DELETE /api/super-admin/businesses/{id}/members/{user_id}` — remove admin.
+- **Business Admin** endpoints (`/api/business/{id}`) are gated by `require_business_admin` (super-admin bypass + `business_members` membership check). `is_active` is intentionally ignored here — only the super admin can soft-deactivate a business.
+- Startup validation in `app/db/supabase_client.py` verifies that `SUPABASE_SERVICE_ROLE_KEY` is a real service-role JWT and that its `ref` matches the `SUPABASE_URL` project, refusing to boot on misconfiguration.
+
 ---
 
 ## Database migrations (Supabase / Phase 1)

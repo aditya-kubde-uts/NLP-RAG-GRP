@@ -1,8 +1,18 @@
 # RAG Factory
 
-Multi-tenant Retrieval-Augmented Generation platform. Super Admins create isolated RAG chatbots for different businesses; each business gets its own admin dashboard + user chat portal — powered by Azure OpenAI, Supabase (Postgres + pgvector), FastAPI, and React.
+Multi-tenant Retrieval-Augmented Generation platform. The **platform Super Admin** (you) creates isolated RAG chatbots for different businesses and assigns each one to its own **Business Admin** with dedicated credentials; each business gets its own admin workspace + user chat portal — powered by Azure OpenAI, Supabase (Postgres + pgvector), FastAPI, and React.
 
-> **Status:** Phase 0 complete; **Phase 1** migration SQL is in `supabase/migrations/` — apply to your Supabase project (see [backend/README.md](backend/README.md)). See [PLAN.md](PLAN.md) for the roadmap and [STEPS.md](STEPS.md) for the detailed reference.
+> **Status:** Phases 0–5 complete; **Phase 6** (Knowledge Base Management) is next. Migration SQL lives in `supabase/migrations/`. See [PLAN.md](PLAN.md) for the roadmap and [STEPS.md](STEPS.md) for the detailed reference.
+
+---
+
+## Ownership model
+
+- **Super Admin** — the platform owner. Creates businesses, invites Business Admins, manages platform-wide stats, can soft-deactivate any business.
+- **Business Admin** — assigned per business by the super admin. Owns a single tenant workspace (`/b/<slug>/admin`) and can manage its profile, settings, and (in upcoming phases) its knowledge base, alerts, and analytics. Cannot see other businesses.
+- **End users / visitors** — talk to the business's chatbot at `/b/<slug>`. Anonymous by default; can be gated behind login via the `user_login_required` setting on each business.
+
+When a super admin creates a business, they supply the Business Admin's email (optionally a password and full name). The backend provisions the auth account via Supabase Admin API with `email_confirm=true`, assigns them as `owner_id` and the sole `business_members` admin, and returns **one-time credentials** that the super admin can hand off. Row-level security + a backend `require_business_admin` dependency enforce tenant isolation end-to-end.
 
 ---
 
@@ -115,13 +125,13 @@ RAG-Factory/
 | Phase | Description | Status |
 |---|---|---|
 | 0 | Project scaffold & environment | Done |
-| 1 | Supabase schema, pgvector, RLS | Migrations in repo — apply to hosted DB |
+| 1 | Supabase schema, pgvector, RLS | Migrations in repo — applied on dev DB |
 | 2 | Backend foundation (config, Supabase clients, deps, logging) | Done |
-| 3 | Authentication | Pending |
-| 4 | Super Admin Dashboard | Pending |
-| 5 | RAG engine core | Pending |
+| 3 | Authentication (Supabase Auth + React context + protected routes) | Done |
+| 4 | Super Admin Dashboard + **per-business admin provisioning** | Done |
+| 5 | RAG engine core (llm_router, chunker, ingestor, searcher, rag_brain) | Done |
 | 6 | Knowledge base management | Pending |
-| 7 | Business Admin Dashboard | Pending |
+| 7 | Business Admin Dashboard (settings page already live; KB/alerts/analytics pending) | In progress |
 | 8 | User Chat Portal | Pending |
 | 9 | Integration testing & E2E | Pending |
 | 10 | Embeddable widget | Pending |

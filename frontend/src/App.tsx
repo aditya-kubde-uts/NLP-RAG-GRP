@@ -30,7 +30,7 @@ export default function App() {
       <Route
         path="/b/:slug/admin"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requireBusinessAdminSlug>
             <BusinessAdminDashboard />
           </ProtectedRoute>
         }

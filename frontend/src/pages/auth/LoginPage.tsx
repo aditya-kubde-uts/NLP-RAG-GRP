@@ -23,6 +23,10 @@ export default function LoginPage() {
       const userProfile = await signIn(email, password);
       if (userProfile?.is_super_admin) {
         navigate("/dashboard", { replace: true });
+      } else if (userProfile && userProfile.businesses.length > 0) {
+        // Non-super-admins land directly in the workspace they manage.
+        const target = `/b/${userProfile.businesses[0].slug}/admin`;
+        navigate(target, { replace: true });
       } else {
         navigate(from === "/login" ? "/" : from, { replace: true });
       }

@@ -18,12 +18,17 @@ from app.errors import api_error
 from app.logging import get_logger
 from app.models.business import (
     DEFAULT_BUSINESS_SETTINGS,
+    AdminCredentials,
+    BusinessAdminInvite,
+    BusinessAdminSummary,
     BusinessCreate,
+    BusinessCreateResponse,
     BusinessMemberCreate,
     BusinessResponse,
     BusinessUpdate,
     PlatformStatsResponse,
 )
+from app.services.users import create_or_get_admin_user
 
 log = get_logger(__name__)
 
@@ -154,15 +159,37 @@ def get_business(business_id: UUID, _user: SuperAdmin) -> BusinessResponse:
     return _row_to_business(row, keys)
 
 
-@router.post("/businesses", response_model=BusinessResponse, status_code=201)
-def create_business(body: BusinessCreate, user: SuperAdmin) -> BusinessResponse:
+@router.post("/businesses", response_model=BusinessCreateResponse, status_code=201)
+def create_business(body: BusinessCreate, user: SuperAdmin) -> BusinessCreateResponse:
+    """Create a business.
+
+    If ``admin_email`` is provided the new business is assigned to that user
+    (creating the auth account when needed). The calling super admin is NOT
+    auto-added as a member — super admins already have platform-wide access.
+    """
+
+    admin_user_id: str = str(user.id)
+    admin_payload: AdminCredentials | None = None
+    if body.admin_email:
+        provisioned = create_or_get_admin_user(
+            email=str(body.admin_email),
+            password=body.admin_password,
+            full_name=body.admin_full_name,
+        )
+        admin_user_id = provisioned.user_id
+        admin_payload = AdminCredentials(
+            email=provisioned.email,
+            password=provisioned.password,
+            was_created=provisioned.was_created,
+        )
+
     merged_settings = {**DEFAULT_BUSINESS_SETTINGS, **(body.settings or {})}
     payload: dict[str, Any] = {
         "name": body.name.strip(),
         "slug": body.slug,
         "description": body.description,
         "industry": body.industry,
-        "owner_id": str(user.id),
+        "owner_id": admin_user_id,
         "settings": merged_settings,
     }
     try:
@@ -199,20 +226,35 @@ def create_business(body: BusinessCreate, user: SuperAdmin) -> BusinessResponse:
         supabase_admin.table("business_members").insert(
             {
                 "business_id": new_id,
-                "user_id": str(user.id),
+                "user_id": admin_user_id,
                 "role": "admin",
             }
         ).execute()
+    except APIError as exc:
+        # If user is already a member of this business (edge case when re-using
+        # an existing auth user), that's fine.
+        msg = str(exc).lower()
+        if "duplicate" in msg or "unique" in msg or "23505" in msg:
+            pass
+        else:
+            log.exception("business_member_insert_failed", business_id=new_id)
+            raise api_error(
+                500,
+                code="member_create_failed",
+                message="Business was created but assigning the admin failed.",
+                details={"reason": str(exc)},
+            ) from exc
     except Exception as exc:
         log.exception("business_member_insert_failed", business_id=new_id)
         raise api_error(
             500,
             code="member_create_failed",
-            message="Business was created but assigning you as admin failed.",
+            message="Business was created but assigning the admin failed.",
             details={"reason": str(exc)},
         ) from exc
 
-    return get_business(UUID(str(new_id)), user)
+    base = get_business(UUID(str(new_id)), user)
+    return BusinessCreateResponse(**base.model_dump(), admin=admin_payload)
 
 
 @router.put("/businesses/{business_id}", response_model=BusinessResponse)
@@ -326,12 +368,130 @@ def platform_stats(_user: SuperAdmin) -> PlatformStatsResponse:
     )
 
 
+@router.get(
+    "/businesses/{business_id}/admins",
+    response_model=list[BusinessAdminSummary],
+)
+def list_business_admins(business_id: UUID, _user: SuperAdmin) -> list[BusinessAdminSummary]:
+    """List admins/super_admins of a business with their profile info."""
+    sql = """
+    SELECT m.user_id, m.role, m.created_at,
+           up.email, up.full_name
+    FROM public.business_members m
+    LEFT JOIN public.user_profiles up ON up.id = m.user_id
+    WHERE m.business_id = %s
+    ORDER BY m.created_at ASC;
+    """
+    try:
+        with psycopg.connect(_pg_dsn(), connect_timeout=30) as conn, conn.cursor() as cur:
+            cur.execute(sql, (str(business_id),))
+            rows = cur.fetchall()
+    except Exception as exc:
+        log.warning("list_business_admins_failed", error=str(exc))
+        raise api_error(
+            500,
+            code="database_error",
+            message="Could not load business admins.",
+            details={"reason": str(exc)},
+        ) from exc
+    result: list[BusinessAdminSummary] = []
+    for uid, role, created_at, email, full_name in rows:
+        result.append(
+            BusinessAdminSummary(
+                user_id=str(uid),
+                role=str(role or "admin"),
+                created_at=created_at,
+                email=email,
+                full_name=full_name,
+            )
+        )
+    return result
+
+
+@router.post(
+    "/businesses/{business_id}/admins",
+    status_code=201,
+    response_model=AdminCredentials,
+)
+def invite_business_admin(
+    business_id: UUID,
+    body: BusinessAdminInvite,
+    _user: SuperAdmin,
+) -> AdminCredentials:
+    """Invite (or attach) a Business Admin by email.
+
+    Creates the auth user when needed (email auto-confirmed) and upserts a
+    ``business_members`` row for the given business.
+    """
+    # Ensure the business exists
+    try:
+        biz = (
+            supabase_admin.table("businesses")
+            .select("id")
+            .eq("id", str(business_id))
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        raise api_error(
+            500,
+            code="database_error",
+            message="Could not load business.",
+            details={"reason": str(exc)},
+        ) from exc
+    if not (getattr(biz, "data", None) or []):
+        raise api_error(404, code="not_found", message="Business not found.")
+
+    provisioned = create_or_get_admin_user(
+        email=str(body.email),
+        password=body.password,
+        full_name=body.full_name,
+    )
+
+    try:
+        supabase_admin.table("business_members").insert(
+            {
+                "business_id": str(business_id),
+                "user_id": provisioned.user_id,
+                "role": body.role,
+            }
+        ).execute()
+    except APIError as exc:
+        msg = str(exc).lower()
+        if "duplicate" in msg or "unique" in msg or "23505" in msg:
+            raise api_error(
+                409,
+                code="already_member",
+                message="This user is already a member of the business.",
+            ) from exc
+        raise api_error(
+            400,
+            code="member_add_failed",
+            message="Could not add admin.",
+            details={"reason": str(exc)},
+        ) from exc
+    except Exception as exc:
+        raise api_error(
+            500,
+            code="member_add_failed",
+            message="Could not add admin.",
+            details={"reason": str(exc)},
+        ) from exc
+
+    return AdminCredentials(
+        email=provisioned.email,
+        password=provisioned.password,
+        was_created=provisioned.was_created,
+    )
+
+
 @router.post("/businesses/{business_id}/members", status_code=201)
 def add_business_member(
     business_id: UUID,
     body: BusinessMemberCreate,
     user: SuperAdmin,
 ) -> dict[str, str]:
+    """Legacy: attach an existing user (by ``user_id``) to a business."""
     _ = user
     try:
         prof = (
@@ -349,7 +509,9 @@ def add_business_member(
             details={"reason": str(exc)},
         ) from exc
     if not (getattr(prof, "data", None) or []):
-        raise api_error(404, code="user_not_found", message="No user profile exists for this user_id.")
+        raise api_error(
+            404, code="user_not_found", message="No user profile exists for this user_id."
+        )
 
     try:
         supabase_admin.table("business_members").insert(

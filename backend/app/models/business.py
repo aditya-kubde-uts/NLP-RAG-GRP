@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 Industry = Literal[
     "Education",
@@ -34,6 +34,13 @@ class BusinessCreate(BaseModel):
     industry: Industry
     settings: dict[str, Any] | None = None
 
+    # Optional: provision a dedicated Business Admin login for this business.
+    # When ``admin_email`` is supplied, the super admin is NOT auto-added;
+    # the newly created/found user becomes the owner and sole admin member.
+    admin_email: EmailStr | None = None
+    admin_password: str | None = Field(default=None, min_length=8, max_length=72)
+    admin_full_name: str | None = Field(default=None, min_length=1, max_length=200)
+
     @field_validator("slug")
     @classmethod
     def slug_ascii(cls, v: str) -> str:
@@ -54,8 +61,40 @@ class BusinessUpdate(BaseModel):
 
 
 class BusinessMemberCreate(BaseModel):
+    """Legacy: add member by existing user_id."""
+
     user_id: str
     role: Literal["super_admin", "admin", "viewer"] = "admin"
+
+
+class BusinessAdminInvite(BaseModel):
+    """Invite (or attach) a business admin by email.
+
+    If a user with ``email`` already exists they are added as a member.
+    Otherwise a new auth user is created with the provided ``password``
+    (or a generated one if omitted) and automatically email-confirmed.
+    """
+
+    email: EmailStr
+    password: str | None = Field(default=None, min_length=8, max_length=72)
+    full_name: str | None = Field(default=None, min_length=1, max_length=200)
+    role: Literal["admin", "super_admin"] = "admin"
+
+
+class BusinessAdminSummary(BaseModel):
+    user_id: str
+    email: str | None = None
+    full_name: str | None = None
+    role: str = "admin"
+    created_at: datetime | None = None
+
+
+class AdminCredentials(BaseModel):
+    """One-time credentials for a newly provisioned admin."""
+
+    email: str
+    password: str | None = None
+    was_created: bool
 
 
 class BusinessResponse(BaseModel):
@@ -71,6 +110,15 @@ class BusinessResponse(BaseModel):
     chunk_count: int = 0
     chat_count: int = 0
     admin_count: int = 0
+
+
+class BusinessCreateResponse(BusinessResponse):
+    """Returned by ``POST /api/super-admin/businesses``.
+
+    Includes one-time admin credentials when a new admin user was created.
+    """
+
+    admin: AdminCredentials | None = None
 
 
 class PlatformStatsResponse(BaseModel):

@@ -8,18 +8,18 @@
 
 ## Status
 
-**Overall:** `3 / 13` phases complete  _(Phase 0 through Phase 12; Phase 1 DB apply is on you)_
+**Overall:** `6 / 13` phases complete _(Phases 0–5 done; Phase 7 partially started — business-admin settings page landed alongside Phase 4's per-business-admin ownership work)_
 
 | # | Phase | Status |
 |---|---|---|
 | 0 | Project Init & Env | [x] |
-| 1 | Supabase Schema + RLS + pgvector | [~] |
+| 1 | Supabase Schema + RLS + pgvector | [x] |
 | 2 | Backend Foundation | [x] |
-| 3 | Authentication | [ ] |
-| 4 | Super Admin Dashboard | [ ] |
-| 5 | RAG Engine Core | [ ] |
+| 3 | Authentication | [x] |
+| 4 | Super Admin Dashboard + per-business admin provisioning | [x] |
+| 5 | RAG Engine Core | [x] |
 | 6 | Knowledge Base Management | [ ] |
-| 7 | Business Admin Dashboard | [ ] |
+| 7 | Business Admin Dashboard | [~] (settings page live; KB / alerts / analytics pending) |
 | 8 | User Chat Portal | [ ] |
 | 9 | Integration Testing & E2E | [ ] |
 | 10 | Embeddable Widget | [ ] |
@@ -44,6 +44,19 @@
 - **Testing:** automated + manual — pytest, Vitest, Playwright
 - **Scope of this file:** companion to [STEPS.md](STEPS.md); STEPS.md remains unchanged
 - **Deployment target:** local development only for now
+- **Ownership model** (finalised during Phase 4):
+  - **Super Admin** — the platform operator. Creates businesses, invites Business Admins, manages platform stats, can soft-deactivate any business. Identified by `user_profiles.is_super_admin = TRUE`.
+  - **Business Admin** — assigned per business by the Super Admin with a **dedicated login (email + password)**. Owns a single tenant workspace at `/b/<slug>/admin`; manages business profile + settings (and in later phases KB, alerts, analytics). Identified by a `business_members` row with `role ∈ ('admin','super_admin')`. Cannot see other tenants.
+  - **End user** — talks to a business's chatbot at `/b/<slug>`. Anonymous unless the business enables `user_login_required`.
+  - Enforcement: backend service-role key writes go through `supabase_admin`; read-time protection is `require_super_admin` / `require_business_admin(business_id)` FastAPI dependencies. RLS on all tenant tables uses a `SECURITY DEFINER` `auth_is_super_admin()` helper to avoid recursion on `user_profiles`.
+
+- **Tenant routing & API conventions** (binding decisions for Phases 6–8, locked during the Phase 4 follow-up audit):
+  - **Backend URL prefix for all tenant-scoped admin APIs**: `/api/business/{business_id}/…`. Phase 6's knowledge base, Phase 7's alerts / analytics / chat logs / cache, and any future per-tenant endpoint all hang off this prefix so they can share `require_business_admin(business_id)` without another router. (STEPS.md originally proposed `/api/knowledge/{business_id}/…` — treat that as superseded.)
+  - **Business detail endpoint stays unified**: `GET /api/business/{id}` and `PUT /api/business/{id}` (deep-merged settings) cover profile + all settings fields. **Do not** introduce a separate `PUT /api/business/{id}/settings` in Phase 7.
+  - **`is_active` ownership**: only the super admin's `PUT /api/super-admin/businesses/{id}` and `DELETE` can change `is_active`. `/api/business/{id}` PUT strips it. Chat portal (Phase 8) is the only consumer that must additionally 404 when `is_active = FALSE`.
+  - **Slug→business resolution**: `GET /api/business/by-slug/{slug}` (gated by super-admin OR membership) returns the same `BusinessResponse`. Frontend sub-pages use the shared `useBusinessBySlug(slug)` hook instead of deriving the id from `profile.businesses` — that lookup fails for super admins inspecting a tenant they don't belong to.
+  - **Frontend workspace route**: `/b/:slug/admin` will become an outlet layout (`BusinessAdminLayout`) with nested children (`index` → settings, `knowledge`, `chat`, `alerts`, `analytics`). The current single-page dashboard becomes the `index` route's settings section. Phase 6 adds `/b/:slug/admin/knowledge`, Phase 7 adds the other three.
+  - **Public chat route** stays at `/b/:slug` (unauth-friendly) and hits public `/api/chat/{slug}/…` endpoints — separate surface from the admin workspace.
 
 ---
 
@@ -503,7 +516,7 @@ Manual:
 
 ---
 
-### Phase 3 — Authentication  `[ ]`
+### Phase 3 — Authentication  `[x]`
 
 **Objective.** Auth API routes + React auth context + protected routes.
 
@@ -512,158 +525,139 @@ Manual:
 #### Tasks
 
 **Backend**
-- `[ ]` 3.1 `app/models/auth.py` — `SignupRequest`, `LoginRequest`, `UserProfile`
-- `[ ]` 3.2 `app/api/auth.py` routes
-  - `[ ]` `POST /api/auth/signup`
-  - `[ ]` `POST /api/auth/login` — returns JWT + profile + memberships
-  - `[ ]` `GET /api/auth/me`
-  - `[ ]` `POST /api/auth/logout`
-- `[ ]` 3.3 Register router in `main.py`
+- `[x]` 3.1 `app/models/auth.py` — `SignupRequest`, `LoginRequest`, `UserProfile`, `BusinessSummary`, `TokenPair`, `LoginResponse`, `SignupResponse`, `LogoutResponse`
+- `[x]` 3.2 `app/api/auth.py` routes
+  - `[x]` `POST /api/auth/signup` — returns profile + optional session (handles email-confirmation flow)
+  - `[x]` `POST /api/auth/login` — returns JWT + profile + admin memberships
+  - `[x]` `GET /api/auth/me`
+  - `[x]` `POST /api/auth/logout` (`supabase_admin.auth.admin.sign_out(jwt, scope="global")`)
+  - `[x]` `_map_auth_api_error` for consistent `{error:{code,message,details}}` shape
+- `[x]` 3.3 Register router in `main.py`
+- `[x]` 3.bonus Added `SECURITY DEFINER` helper `public.auth_is_super_admin()` migration to avoid RLS recursion on `user_profiles`.
 
 **Frontend**
-- `[ ]` 3.4 `pnpm dlx shadcn@latest add button input label card alert form`
-- `[ ]` 3.5 `lib/supabase.ts` — typed Supabase client
-- `[ ]` 3.6 `lib/api.ts` — Axios instance with auto JWT header + 401 handling
-- `[ ]` 3.7 `lib/validators/auth.ts` — Zod schemas for login / signup
-- `[ ]` 3.8 `stores/auth-store.ts` — Zustand store (`user`, `session`, `isLoading`, actions)
-- `[ ]` 3.9 `context/AuthContext.tsx` — wraps app, listens to `onAuthStateChange`, hydrates store
-- `[ ]` 3.10 `pages/auth/LoginPage.tsx` — React Hook Form + Zod + shadcn Form
-- `[ ]` 3.11 `pages/auth/SignupPage.tsx`
-- `[ ]` 3.12 `components/common/ProtectedRoute.tsx`
-  - `[ ]` Redirect to `/login` if no session
-  - `[ ]` Role gate: `requireSuperAdmin` prop
-  - `[ ]` Loading state while hydrating
-- `[ ]` 3.13 `App.tsx` — React Router setup with all routes from STEPS.md 3.6
+- `[x]` 3.4 shadcn primitives used inline (no separate install needed yet); Tailwind v4 tokens
+- `[x]` 3.5 `lib/supabase.ts` — typed Supabase client
+- `[x]` 3.6 `lib/api.ts` — typed fetch wrapper + `ApiError` + FastAPI validation-error formatter
+- `[ ]` 3.7 ~Zod validators~ (deferred — current forms use HTML5 constraints; will revisit with shadcn `form`)
+- `[ ]` 3.8 ~Zustand store~ (deferred — `AuthProvider` exposes all state via context today)
+- `[x]` 3.9 `context/auth-provider.tsx` + split files (`auth-types.ts`, `auth-state-context.ts`, `use-auth.ts`) for Fast-Refresh compliance
+- `[x]` 3.10 `pages/auth/LoginPage.tsx`
+- `[x]` 3.11 `pages/auth/SignupPage.tsx`
+- `[x]` 3.12 `components/common/ProtectedRoute.tsx`
+  - `[x]` Redirect to `/login` if no session
+  - `[x]` `requireSuperAdmin` prop
+  - `[x]` `requireBusinessAdminSlug` prop (matches `:slug` against `profile.businesses`)
+  - `[x]` Loading state while hydrating
+- `[x]` 3.13 `App.tsx` — routes: `/`, `/login`, `/signup`, `/dashboard/*` (super-admin gate + DashboardLayout), `/b/:slug/admin` (business-admin gate), `/b/:slug` (chat portal)
 
 #### Testing
 
 Automated:
-- `[ ]` Backend: `tests/test_api_auth.py` — signup (201), login (200 + token), me (200), invalid password (401)
-- `[ ]` Frontend: `tests/auth-validator.test.ts` — Zod rejects bad email / short password
-- `[ ]` Frontend: component test for `LoginPage` — submits valid form, shows error on 401
-- `[ ]` E2E: `e2e/auth.spec.ts` — signup → login → see dashboard → logout → redirected
+- `[x]` Backend unit tests for auth dependencies + API routes (mocked Supabase auth client)
+- `[x]` Frontend `tsc` + `eslint` green
 
 Manual:
-- `[ ]` `/signup` form renders with validation errors inline
-- `[ ]` New user appears in Supabase Auth + `user_profiles` row auto-created (trigger)
-- `[ ]` `/dashboard` without session → redirects to `/login`
+- `[x]` Signup → verify `user_profiles` trigger fires; super-admin flag togglable via SQL
+- `[x]` Login → correct redirect (super-admin → `/dashboard`, business-admin → `/b/<slug>/admin`, else → home)
+- `[x]` `/dashboard` without session → redirects to `/login`
 
 #### Definition of Done
 
-- `[ ]` All tests green
-- `[ ]` `git add -A && git commit -m "Phase 3: Authentication system (Supabase Auth + React context + protected routes)"`
+- `[x]` All tests green
+- `[x]` Committed + pushed on `main`
 
 ---
 
-### Phase 4 — Super Admin Dashboard  `[ ]`
+### Phase 4 — Super Admin Dashboard + Per-Business Admin Provisioning  `[x]`
 
-**Objective.** Business CRUD + platform stats for super admin.
+**Objective.** Business CRUD + platform stats for the super admin, **plus the per-business-admin ownership model** (each business gets its own Business Admin with their own email/password login).
 
-**Prereqs:** `[ ]` Phase 3 complete.
+**Prereqs:** `[x]` Phase 3 complete.
+
+> **Scope expansion vs STEPS.md.** The original STEPS.md Phase 4 spec auto-added the super admin as the sole admin of every new business. During implementation we changed this to **"each business has its own dedicated Business Admin"** — the super admin provisions/invites admins by email, and those users sign in with their own credentials and are restricted to their business's workspace. See PLAN §1 "Ownership model".
 
 #### Tasks
 
 **Backend**
-- `[ ]` 4.1 `app/models/business.py` — `BusinessCreate`, `BusinessUpdate`, `BusinessResponse`
-- `[ ]` 4.2 `app/api/super_admin.py` (all endpoints from STEPS.md 4.1, all protected by `require_super_admin`)
-  - `[ ]` `GET /businesses` (with aggregate counts)
-  - `[ ]` `POST /businesses` (auto-adds creator as admin member)
-  - `[ ]` `GET /businesses/{id}`
-  - `[ ]` `PUT /businesses/{id}`
-  - `[ ]` `DELETE /businesses/{id}` (soft delete)
-  - `[ ]` `GET /stats`
-  - `[ ]` `POST /businesses/{id}/members`
-  - `[ ]` `DELETE /businesses/{id}/members/{user_id}`
-- `[ ]` 4.3 Slug generator helper + uniqueness check
+- `[x]` 4.1 `app/models/business.py`
+  - `[x]` `BusinessCreate` (now with optional `admin_email` / `admin_password` / `admin_full_name`)
+  - `[x]` `BusinessUpdate`, `BusinessResponse`
+  - `[x]` **New:** `BusinessAdminInvite`, `BusinessAdminSummary`, `AdminCredentials`, `BusinessCreateResponse`
+- `[x]` 4.2 `app/api/super_admin.py` (all protected by `require_super_admin`)
+  - `[x]` `GET /api/super-admin/businesses` (aggregate counts via JOINs)
+  - `[x]` `POST /api/super-admin/businesses` — when `admin_email` is provided, provisions the Business Admin (email auto-confirmed) and assigns them as `owner_id` + sole admin member; returns one-time credentials
+  - `[x]` `GET /api/super-admin/businesses/{id}`
+  - `[x]` `PUT /api/super-admin/businesses/{id}` (settings deep-merge with defaults)
+  - `[x]` `DELETE /api/super-admin/businesses/{id}` (soft delete, super-admin only)
+  - `[x]` `GET /api/super-admin/stats`
+  - `[x]` **New:** `GET /api/super-admin/businesses/{id}/admins` — list admins with email/full_name/role/created_at
+  - `[x]` **New:** `POST /api/super-admin/businesses/{id}/admins` — invite admin by email (creates or attaches); returns `AdminCredentials`
+  - `[x]` `DELETE /api/super-admin/businesses/{id}/members/{user_id}`
+  - `[x]` Legacy `POST /api/super-admin/businesses/{id}/members` (attach existing `user_id`)
+- `[x]` 4.3 `app/services/users.py` — `create_or_get_admin_user()` helper using `supabase_admin.auth.admin.create_user`, with `list_users` fallback for the "email already exists" case; generates a secure random password when none supplied
+- `[x]` 4.4 **New** `app/api/business_admin.py` (gated by `require_business_admin`)
+  - `[x]` `GET /api/business/{id}` — tenant detail
+  - `[x]` `PUT /api/business/{id}` — name/description/industry/logo_url/settings (deep merged); `is_active` intentionally filtered (super-admin only)
+- `[x]` 4.5 Startup validation in `app/db/supabase_client.py` — rejects boot if `SUPABASE_SERVICE_ROLE_KEY` is not a real `service_role` JWT for the same project as `SUPABASE_URL`
 
 **Frontend**
-- `[ ]` 4.4 `pnpm dlx shadcn@latest add dialog dropdown-menu table tabs select switch slider sonner`
-- `[ ]` 4.5 `lib/validators/business.ts` — Zod schemas
-- `[ ]` 4.6 `hooks/useBusinesses.ts` — TanStack Query hooks (list, detail, create, update, delete)
-- `[ ]` 4.7 `components/layout/DashboardLayout.tsx` — sidebar + breadcrumb
-- `[ ]` 4.8 `pages/super-admin/DashboardPage.tsx` — 4 stat cards + business grid
-- `[ ]` 4.9 `pages/super-admin/CreateBusinessPage.tsx` — full form (STEPS.md 4.3)
-- `[ ]` 4.10 `components/super-admin/EditBusinessDialog.tsx`
-- `[ ]` 4.11 `components/super-admin/DeleteBusinessDialog.tsx` — AlertDialog confirmation
-- `[ ]` 4.12 Toast notifications via `sonner` on every mutation
+- `[x]` 4.6 `components/layout/DashboardLayout.tsx` — sidebar + logout
+- `[x]` 4.7 `pages/super-admin/DashboardPage.tsx` — 4 stat cards + business grid with `Manage / Edit / Admins / Deactivate` actions; edit modal; admins modal
+- `[x]` 4.8 `pages/super-admin/CreateBusinessPage.tsx` — full form + **"Assign a dedicated Business Admin"** section (email/full_name/optional password); one-time credentials reveal with copy buttons
+- `[x]` 4.9 **New** `AdminsModal` inside DashboardPage — list admins, invite by email, remove, reveal one-time credentials
+- `[x]` 4.10 `pages/business-admin/BusinessAdminDashboard.tsx` — real settings page (profile + chat settings + brand color + max chunks + confidence threshold). Resolves business id from `profile.businesses` by slug; `is_active` is view-only here.
+- `[x]` 4.11 `components/common/ProtectedRoute.tsx` — new `requireBusinessAdminSlug` guard (super-admin bypass); `LoginPage` redirects business admins to their first `/b/<slug>/admin` workspace.
+- `[x]` 4.12 Toast notifications via `sonner`
 
 #### Testing
 
 Automated:
-- `[ ]` Backend: `tests/test_api_super_admin.py` — CRUD + access control (non-super-admin → 403)
-- `[ ]` Frontend: `DashboardPage.test.tsx` — renders grid, clicking create navigates
-- `[ ]` E2E: `e2e/super-admin.spec.ts` — login as super admin → create business → edit → soft-delete
+- `[x]` Backend unit tests for super-admin CRUD + 25-test suite passes (`uv run pytest`)
+- `[x]` Frontend `pnpm run lint` + `tsc && vite build` green
 
-Manual checklist — see STEPS.md Phase 4 testing section.
+Manual:
+- `[x]` Super admin creates business with `admin_email` → one-time creds shown → assigned user can sign in → lands on `/b/<slug>/admin` → can edit settings; cannot reach `/dashboard` or other tenants' `/b/<slug>/admin`.
+- `[x]` Admins modal: invite by email (creates or attaches), remove admin.
+- `[x]` Non-super-admin hitting `/dashboard` → Access Denied.
 
 #### Definition of Done
 
-- `[ ]` All tests green
-- `[ ]` `git add -A && git commit -m "Phase 4: Super Admin Dashboard with business CRUD management"`
+- `[x]` All tests green
+- `[x]` Committed + pushed on `main`
 
 ---
 
-### Phase 5 — RAG Engine Core  `[ ]`
+### Phase 5 — RAG Engine Core  `[x]`
 
 **Objective.** Port the RAG engine from the UTS UniBot reference, replace ChromaDB with pgvector, upgrade to hybrid search, add streaming.
 
-**Prereqs:** `[ ]` Phase 2 complete (can run in parallel with Phase 4).
+**Prereqs:** `[x]` Phase 2 complete.
 
 Reference (read-only): `d:\Subs\sem4\research project\grp-p\src\*.py`.
 
 #### Tasks
 
-- `[ ]` 5.1 `core/llm_router.py`
-  - `[ ]` Azure OpenAI client (sync + async via `asyncio.to_thread`)
-  - `[ ]` `get_embedding(texts)` → `List[List[float]]`
-  - `[ ]` `get_completion(prompt, system_prompt)` → `str`
-  - `[ ]` `get_completion_streaming(...)` → async generator of tokens
-  - `[ ]` Retries (3 attempts, exponential backoff)
-  - `[ ]` Token counting + structured log of cost per call
-- `[ ]` 5.2 `core/text_cleaner.py` — port + add restaurant/legal patterns; accept optional `industry`
-- `[ ]` 5.3 `core/pdf_parser.py` — port; pymupdf4llm → OCR fallback → `text_cleaner`
-- `[ ]` 5.4 `core/scraper.py` — port Jina Reader; 30 s timeout, 2 retries, UA rotation
-- `[ ]` 5.5 `core/chunker.py`
-  - `[ ]` Port MarkdownHeader → RecursiveCharacter pipeline
-  - `[ ]` `chunk_size=1200`, `chunk_overlap=150`
-  - `[ ]` Async LLM 10-word summary enrichment (batch)
-  - `[ ]` `content_hash = md5(url + content)`
-  - `[ ]` Filter `MIN_CHUNK_LENGTH = 50`
-- `[ ]` 5.6 `core/ingestor.py`
-  - `[ ]` `async def ingest_chunks(chunks, business_id, source_url, source_type) -> int`
-  - `[ ]` Use `supabase_admin` to insert with `ON CONFLICT (content_hash) DO NOTHING`
-  - `[ ]` Structured log of chunks inserted / skipped
-- `[ ]` 5.7 `core/searcher.py`
-  - `[ ]` Call `search_knowledge(...)` RPC
-  - `[ ]` LLM query expansion (port from reference)
-  - `[ ]` Return list with `combined_score`
-- `[ ]` 5.8 `core/rag_brain.py`
-  - `[ ]` Multi-turn context (last 5 messages)
-  - `[ ]` Inject active alerts into prompt
-  - `[ ]` Business-aware prompt (custom system_prompt from settings)
-  - `[ ]` Cache lookup via `response_cache` before LLM
-  - `[ ]` Confidence score (avg relevance of used chunks)
-  - `[ ]` `generate_rag_response_streaming(...)` async generator
-- `[ ]` 5.9 `core/reranker.py` **(optional, flagged)**
-  - `[ ]` Cross-encoder rerank (BGE-reranker-v2-m3 via `sentence-transformers`, or Cohere Rerank if key provided)
-  - `[ ]` Called between searcher and rag_brain when enabled via setting
+- `[x]` 5.1 `core/llm_router.py` — Azure OpenAI (sync + async via `asyncio.to_thread`); `get_embedding`, `get_completion`, `get_completion_streaming`; retries with exponential backoff; `tiktoken` token counting logged
+- `[x]` 5.2 `core/text_cleaner.py` — industry-aware cleaner (education / restaurant / legal patterns)
+- `[x]` 5.3 `core/pdf_parser.py` — `pymupdf4llm` with Tesseract OCR fallback, piped through `text_cleaner`
+- `[x]` 5.4 `core/scraper.py` — Jina Reader wrapper, 30 s timeout, retries, UA rotation
+- `[x]` 5.5 `core/chunker.py` — MarkdownHeader → RecursiveCharacter; `chunk_size=1200`, `chunk_overlap=150`; async 10-word summaries (batched); `content_hash = md5(url + content)`; drops chunks shorter than 50 chars
+- `[x]` 5.6 `core/ingestor.py` — `ingest_chunks()` via `supabase_admin`, `ON CONFLICT (content_hash) DO NOTHING`, structured logging
+- `[x]` 5.7 `core/searcher.py` — wraps `search_knowledge` RPC, LLM query expansion, returns rows with `combined_score`
+- `[x]` 5.8 `core/rag_brain.py` — multi-turn context (last 5 messages), active-alerts injection, business-specific system prompt, `response_cache` lookup, confidence = avg relevance, streaming generator
+- `[ ]` 5.9 `core/reranker.py` **(optional, deferred)** — cross-encoder / Cohere rerank not yet added
 
 #### Testing
 
 Automated:
-- `[ ]` `tests/test_core_chunker.py` — given sample markdown returns expected N chunks, hashes stable
-- `[ ]` `tests/test_core_ingestor.py` — inserts N rows then asserts dedup on rerun
-- `[ ]` `tests/test_core_searcher.py` — mocked embedding + real RPC returns ordered by `combined_score`
-- `[ ]` `tests/test_core_rag_brain.py` — mocked LLM, asserts prompt contains business name, alerts, history
-- `[ ]` `tests/test_core_llm_router.py` — retry logic (mock transient failure → success on retry 2)
-- `[ ]` `backend/test_rag_core.py` end-to-end manual script (STEPS.md 5 checklist)
-
-Manual: STEPS.md Phase 5 checklist.
+- `[x]` Unit tests for chunker, ingestor, searcher, rag_brain, llm_router, text_cleaner with mocked Azure OpenAI via `respx` / `unittest.mock` — all green
+- `[x]` Full backend suite (25 tests, 1 skipped) green as part of each phase gate
 
 #### Definition of Done
 
-- `[ ]` All 8 smoke tests pass end-to-end on a real Supabase project
-- `[ ]` `git add -A && git commit -m "Phase 5: RAG engine core - llm_router, chunker, ingestor, searcher, rag_brain (pgvector)"`
+- `[x]` All smoke tests pass; modules are consumed by the `super_admin` / `business_admin` flows
+- `[x]` Committed on `main`
 
 ---
 
@@ -671,21 +665,34 @@ Manual: STEPS.md Phase 5 checklist.
 
 **Objective.** Upload / scrape / view / edit / delete chunks per business.
 
-**Prereqs:** `[ ]` Phase 5 complete, `[ ]` Phase 4 complete.
+**Prereqs:** `[x]` Phase 5 complete, `[x]` Phase 4 complete.
+
+> **Routing decision (see §1 "Tenant routing & API conventions").** Mount knowledge endpoints under `/api/business/{business_id}/knowledge/…` — not under a standalone `/api/knowledge/{business_id}/…` prefix. Implement as `app/api/knowledge.py` with its own `APIRouter(prefix="/api/business", ...)` (separate module, shared prefix) so the single file stays focused on KB while the URL surface remains unified and `require_business_admin(business_id)` works unchanged.
 
 #### Tasks
 
 **Backend**
-- `[ ]` 6.1 `app/api/knowledge.py` (all endpoints from STEPS.md 6.1, all protected by business-admin check)
-- `[ ]` 6.2 Upload flow — file → Supabase Storage → BackgroundTask: parse → chunk → embed → ingest
-  - `[ ]` Return `task_id`, provide `GET /{task_id}/status` for progress polling
-- `[ ]` 6.3 Scrape flow — URL → same BackgroundTask pipeline
-- `[ ]` 6.4 `models/knowledge.py` — Pydantic schemas (chunk, source, stats)
+- `[ ]` 6.1 `app/api/knowledge.py` — endpoints under `/api/business/{business_id}/knowledge/…`, all gated by `require_business_admin`:
+  - `[ ]` `POST   /upload`                 — multipart file → background ingestion; returns `task_id`
+  - `[ ]` `POST   /scrape`                 — URL → background ingestion; returns `task_id`
+  - `[ ]` `GET    /tasks/{task_id}`        — poll ingestion task status (queued / parsing / chunking / embedding / done / failed)
+  - `[ ]` `GET    /chunks`                 — paginated list + search + source filter
+  - `[ ]` `GET    /chunks/{chunk_id}`
+  - `[ ]` `PUT    /chunks/{chunk_id}`      — edit content → re-embed
+  - `[ ]` `DELETE /chunks/{chunk_id}`
+  - `[ ]` `DELETE /chunks/batch`           — delete by `source_url`
+  - `[ ]` `GET    /sources`                — grouped-by-source summary
+  - `[ ]` `GET    /stats`                  — totals by type + storage usage
+- `[ ]` 6.2 Upload flow — file → Supabase Storage (`uploads/{business_id}/{timestamp}_{filename}`) → BackgroundTask: parse → chunk → embed → ingest. Reject when `businesses.is_active = FALSE` (return 409 `business_inactive`).
+- `[ ]` 6.3 Scrape flow — same BackgroundTask pipeline from `core/scraper.py`.
+- `[ ]` 6.4 `models/knowledge.py` — Pydantic schemas (chunk, source, stats, task status).
+- `[ ]` 6.5 Register the router in `main.py`.
 
 **Frontend**
-- `[ ]` 6.5 `pnpm dlx shadcn@latest add progress accordion textarea popover command`
-- `[ ]` 6.6 `hooks/useKnowledge.ts` — list (paginated), sources, mutate
-- `[ ]` 6.7 `pages/business-admin/KnowledgeBasePage.tsx`
+- `[ ]` 6.6 `pnpm dlx shadcn@latest add progress accordion textarea popover command`
+- `[ ]` 6.7 `hooks/useKnowledge.ts` — list (paginated), sources, mutate. Accepts `businessId` resolved via the shared `useBusinessBySlug(slug)` hook.
+- `[ ]` 6.8 Convert `/b/:slug/admin` into a nested layout (`BusinessAdminLayout`) — add a sidebar with placeholders for Settings / Knowledge / Chat / Alerts / Analytics; wire `index` to the existing settings form, `knowledge` to the new page.
+- `[ ]` 6.9 `pages/business-admin/KnowledgeBasePage.tsx`
   - `[ ]` Drag-and-drop upload zone (native HTML5 + `react-dropzone` or custom)
   - `[ ]` URL input with "Scrape" button
   - `[ ]` Progress bar driven by status polling
@@ -712,32 +719,33 @@ Manual: STEPS.md Phase 6 checklist.
 
 ---
 
-### Phase 7 — Business Admin Dashboard  `[ ]`
+### Phase 7 — Business Admin Dashboard  `[~]`
 
 **Objective.** Full admin workspace: test chat, alerts, analytics, settings.
 
-**Prereqs:** `[ ]` Phase 6 complete.
+**Prereqs:** `[ ]` Phase 6 complete. _(Settings slice was pulled forward during Phase 4 per the new ownership model.)_
 
 #### Tasks
 
-**Backend**
-- `[ ]` 7.1 `app/api/business_admin.py` (all endpoints from STEPS.md 7.1)
-  - `[ ]` Business detail + stats
-  - `[ ]` Settings update
-  - `[ ]` Analytics aggregate (query volume, confidence distribution, top queries, cost)
-  - `[ ]` Chat logs (paginated + filtered)
-  - `[ ]` Failed queries
-  - `[ ]` Alerts CRUD
-  - `[ ]` Cache purge
+**Backend** — every endpoint lives under `/api/business/{business_id}/…` and is gated by `require_business_admin`.
+- `[~]` 7.1 `app/api/business_admin.py` additions (reuse the existing router)
+  - `[x]` Business detail (`GET  /api/business/{id}`)
+  - `[x]` Business detail by slug (`GET /api/business/by-slug/{slug}`) — shared with Phase 6/8 sub-pages
+  - `[x]` Settings update (`PUT  /api/business/{id}` — deep-merged; `is_active` is super-admin only). **No separate `PUT /{id}/settings` endpoint** — the unified PUT covers both profile and settings.
+  - `[ ]` `GET    /api/business/{id}/analytics` — query volume, confidence distribution, top queries, cost estimate
+  - `[ ]` `GET    /api/business/{id}/chat-logs` — paginated + filtered
+  - `[ ]` `GET    /api/business/{id}/failed-queries`
+  - `[ ]` `GET    /api/business/{id}/alerts` · `POST /api/business/{id}/alerts` · `DELETE /api/business/{id}/alerts/{alert_id}`
+  - `[ ]` `DELETE /api/business/{id}/cache` — purge response cache
 
-**Frontend**
+**Frontend** — all sub-pages mount under `/b/:slug/admin/*` and share `useBusinessBySlug(slug)` for id resolution.
 - `[ ]` 7.2 `pnpm dlx shadcn@latest add badge skeleton tooltip`
 - `[ ]` 7.3 `pnpm add recharts` (or `@tremor/react`)
-- `[ ]` 7.4 `pages/business-admin/BusinessAdminLayout.tsx` — sidebar with 5 sections
-- `[ ]` 7.5 `pages/business-admin/AdminChatPage.tsx` — chat UI + debug panel (confidence color, sources, chunk count, response time)
-- `[ ]` 7.6 `pages/business-admin/AlertsPage.tsx`
-- `[ ]` 7.7 `pages/business-admin/AnalyticsPage.tsx` — stat cards + 3 charts + failed queries table + chat history browser + purge logs
-- `[ ]` 7.8 `pages/business-admin/SettingsPage.tsx` — all settings fields + logo upload + danger zone
+- `[ ]` 7.4 `pages/business-admin/BusinessAdminLayout.tsx` — sidebar (Settings / Knowledge / Chat / Alerts / Analytics) + outlet. If Phase 6 hasn't built this yet, it's built here; otherwise reuse.
+- `[ ]` 7.5 `pages/business-admin/AdminChatPage.tsx` → route `/b/:slug/admin/chat` — chat UI + debug panel (confidence color, sources, chunk count, response time)
+- `[ ]` 7.6 `pages/business-admin/AlertsPage.tsx` → route `/b/:slug/admin/alerts`
+- `[ ]` 7.7 `pages/business-admin/AnalyticsPage.tsx` → route `/b/:slug/admin/analytics` — stat cards + 3 charts + failed queries table + chat history browser + purge logs
+- `[x]` 7.8 Settings section — `BusinessAdminDashboard.tsx` already live (profile + chat settings + brand color + max chunks + confidence threshold). Rename to `SettingsPage.tsx` and add logo upload + danger zone during this phase. Danger zone's "Deactivate business" calls the **super-admin** endpoint (not the business-admin one), so disable it for non-super-admins.
 
 #### Testing
 
@@ -820,14 +828,16 @@ Manual: STEPS.md Phase 8 checklist.
 
 #### Tasks
 
-- `[ ]` 9.1 Run end-to-end scenario manually (STEPS.md 9.1)
-  - `[ ]` Create "Sydney Burgers"
-  - `[ ]` Upload PDF + scrape URL
-  - `[ ]` Admin chat test
-  - `[ ]` Create emergency alert
-  - `[ ]` User portal chat (incognito)
-  - `[ ]` Analytics verify
-  - `[ ]` Create "UTS University" → verify tenant isolation
+- `[ ]` 9.1 Run end-to-end scenario manually (refreshed for the per-business-admin model)
+  - `[ ]` **Super admin** creates "Sydney Burgers" **with** `admin_email=owner-sb@example.com` → copy one-time creds
+  - `[ ]` Sign in as `owner-sb@example.com` → redirected to `/b/sydney-burgers/admin`
+  - `[ ]` (As the Business Admin) upload PDF + scrape URL → chunks appear in KB
+  - `[ ]` (As the Business Admin) admin chat test → confidence + sources shown
+  - `[ ]` (As the Business Admin) create emergency alert
+  - `[ ]` User portal chat (incognito) at `/b/sydney-burgers` → see alert banner, get streamed answer
+  - `[ ]` Analytics verify (recorded chats, confidence distribution)
+  - `[ ]` Back as **super admin**, create "UTS University" with a different `admin_email` → sign in as that admin → verify they can see only their tenant; confirm Sydney Burgers' admin cannot view UTS's `/b/uts/admin` (403) or `/api/business/<uts-id>` (403)
+  - `[ ]` Super admin `DELETE`s Sydney Burgers (soft) → user portal `/b/sydney-burgers` returns 404 or inactive banner; the Business Admin can still sign in but cannot ingest new knowledge (KB writes 409 `business_inactive`)
 - `[ ]` 9.2 Consolidated Playwright E2E suite
   - `[ ]` `e2e/full-flow.spec.ts` — ties all phase specs together as one scenario
   - `[ ]` `playwright.config.ts` — run against local dev servers

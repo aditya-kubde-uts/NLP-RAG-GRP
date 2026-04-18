@@ -107,6 +107,7 @@ RAG-Factory/
 | **Frontend** | Streamlit (limited routing, no custom layouts) | React + Vite + shadcn/ui (full SPA, modern UI) |
 | **Vector DB** | ChromaDB (local file-based, single tenant) | pgvector in Supabase (cloud PostgreSQL, multi-tenant) |
 | **Auth** | streamlit-authenticator (basic) | Supabase Auth (JWT, OAuth-ready, RBAC) |
+| **Tenants** | Single user, single tenant | Multi-tenant: platform **Super Admin** provisions one **Business Admin** per business, each with their own email/password login, scoped via `business_members` + `require_business_admin` |
 | **Data Isolation** | Single collection for all data | Row-Level Security (RLS) per `business_id` |
 | **File Storage** | Local filesystem | Supabase Storage (cloud, CDN-ready) |
 | **Chat Logs** | JSON file on disk | PostgreSQL table with analytics |
@@ -1036,23 +1037,48 @@ git add -A && git commit -m "Phase 3: Authentication system (Supabase Auth + Rea
 # ============================================================
 
 ## Objective
-Build the Super Admin Dashboard where the platform owner can create, view, edit, and delete businesses. This is the "command center" of the entire platform.
+Build the Super Admin Dashboard where the platform owner can create, view, edit, and deactivate businesses, **and provision a dedicated Business Admin (their own email + password login) for each business**. This is the "command center" of the entire platform.
+
+> [!IMPORTANT]
+> **Ownership-model update (superseding the original scope).** The original plan below auto-added the super admin as the sole member of every new business. During implementation we adopted a clearer model: **each business has its own Business Admin with their own login**, so multiple businesses can coexist on the same platform without the super admin appearing inside every tenant. The super admin's job is to onboard those admins, not to own the content.
+>
+> Concretely, Task 4.1 should be read as the following endpoints (all require `super_admin`):
+>
+> - `GET    /api/super-admin/businesses` — list with aggregate counts
+> - `POST   /api/super-admin/businesses` — create business; optional body fields `admin_email`, `admin_password`, `admin_full_name`. When provided, the backend provisions a Supabase auth user (email auto-confirmed), sets it as `businesses.owner_id` and the sole `business_members` admin, and returns **one-time credentials** (`AdminCredentials`) in the response. If `admin_email` matches an existing user, that user is attached to the new business instead and no password is returned.
+> - `GET    /api/super-admin/businesses/{id}` — detail
+> - `PUT    /api/super-admin/businesses/{id}` — update (name / description / industry / logo / settings / is_active)
+> - `DELETE /api/super-admin/businesses/{id}` — soft delete
+> - `GET    /api/super-admin/stats` — platform-wide stats
+> - `GET    /api/super-admin/businesses/{id}/admins` — **NEW** — list admins for a business (email, full_name, role, created_at)
+> - `POST   /api/super-admin/businesses/{id}/admins` — **NEW** — invite admin by email; body `{email, password?, full_name?, role?}`; returns `AdminCredentials`
+> - `DELETE /api/super-admin/businesses/{id}/members/{user_id}` — remove admin
+> - `POST   /api/super-admin/businesses/{id}/members` — **legacy** — attach an existing `user_id`
+>
+> The user-provisioning logic lives in `backend/app/services/users.py` (`create_or_get_admin_user`) which wraps `supabase_admin.auth.admin.create_user` with `email_confirm=True` and falls back to `list_users`-by-email when the email already exists.
+>
+> See [PLAN.md §1](PLAN.md) "Ownership model" and the Phase 4 task list for the full checklist.
 
 ### Task 4.1: Create `backend/app/api/super_admin.py`
 Implement these endpoints (all require `super_admin` role):
 - `GET /api/super-admin/businesses` — List all businesses with stats (chunk count, chat count)
-- `POST /api/super-admin/businesses` — Create new business
+- `POST /api/super-admin/businesses` — Create new business **and optionally provision a dedicated Business Admin** (see the Important box above).
 - `GET /api/super-admin/businesses/{business_id}` — Get business details
 - `PUT /api/super-admin/businesses/{business_id}` — Update business
 - `DELETE /api/super-admin/businesses/{business_id}` — Soft delete (set `is_active = FALSE`)
 - `GET /api/super-admin/stats` — Platform-wide stats (total businesses, users, queries, API cost)
-- `POST /api/super-admin/businesses/{business_id}/members` — Add admin to a business
+- `GET /api/super-admin/businesses/{business_id}/admins` — **NEW** — list admins
+- `POST /api/super-admin/businesses/{business_id}/admins` — **NEW** — invite admin by email, returns `AdminCredentials`
+- `POST /api/super-admin/businesses/{business_id}/members` — legacy attach by `user_id`
 - `DELETE /api/super-admin/businesses/{business_id}/members/{user_id}` — Remove admin
 
 ### Task 4.2: Create `backend/app/models/business.py`
+
+The reference shape is below; the **implemented** file also adds optional admin-provisioning fields and a handful of admin-management models (see PLAN.md Phase 4 for the full list).
+
 ```python
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, EmailStr, Field
+from typing import Optional, Literal
 from datetime import datetime
 
 class BusinessCreate(BaseModel):
@@ -1061,6 +1087,11 @@ class BusinessCreate(BaseModel):
     description: Optional[str] = None
     industry: str        # Dropdown: Education, Restaurant, Healthcare, Retail, Legal, Other
     settings: Optional[dict] = None
+
+    # NEW — optional Business Admin provisioning
+    admin_email: Optional[EmailStr] = None
+    admin_password: Optional[str] = Field(default=None, min_length=8, max_length=72)
+    admin_full_name: Optional[str] = Field(default=None, min_length=1, max_length=200)
 
 class BusinessUpdate(BaseModel):
     name: Optional[str] = None
@@ -1083,6 +1114,28 @@ class BusinessResponse(BaseModel):
     chunk_count: int = 0
     chat_count: int = 0
     admin_count: int = 0
+
+# NEW — admin-management payloads
+class BusinessAdminInvite(BaseModel):
+    email: EmailStr
+    password: Optional[str] = Field(default=None, min_length=8, max_length=72)
+    full_name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    role: Literal["admin", "super_admin"] = "admin"
+
+class BusinessAdminSummary(BaseModel):
+    user_id: str
+    email: Optional[str]
+    full_name: Optional[str]
+    role: str
+    created_at: datetime
+
+class AdminCredentials(BaseModel):
+    email: str
+    password: Optional[str] = None   # set only when we just created the user
+    was_created: bool
+
+class BusinessCreateResponse(BusinessResponse):
+    admin: Optional[AdminCredentials] = None
 ```
 
 ### Task 4.3: Create Super Admin Dashboard Pages (Frontend)
@@ -1109,7 +1162,26 @@ class BusinessResponse(BaseModel):
     - Primary Brand Color (color picker)
     - Max Chunks Per Query (number input, default: 8)
     - Confidence Threshold (slider, default: 0.15)
-- **On submit:** Create business → auto-add current user as admin → redirect to dashboard
+- **On submit:** Create business →
+  - If **"Assign a dedicated Business Admin"** is checked, send `admin_email` + optional `admin_password` + `admin_full_name` with the request. On success, render a **one-time credentials reveal** (copy-to-clipboard for email + password + the `/b/<slug>/admin` URL) that the super admin hands to the new owner. The creating super admin is **not** added as a member of the business.
+  - Otherwise, the business is created with no members — admins can be added later from the Dashboard's "Admins" modal.
+
+#### `frontend/src/pages/super-admin/DashboardPage.tsx` — Admins modal
+- Each business card gets an **"Admins"** action (Shield icon).
+- The modal lists admins (email, full name, role, created_at), lets the super admin **invite a new admin by email** (optional password + full name), and remove existing admins. One-time credentials are surfaced on successful invite.
+
+#### `frontend/src/pages/business-admin/BusinessAdminDashboard.tsx` (preview of Phase 7's settings slice)
+- Resolves the `:slug` route param against `profile.businesses` to derive the current business id.
+- Uses `GET /api/business/{id}` / `PUT /api/business/{id}` to render and save a settings form (profile + chat settings + brand color + max chunks + confidence threshold).
+- `is_active` is read-only here — only the super admin can soft-deactivate.
+
+#### `frontend/src/components/common/ProtectedRoute.tsx` — slug-scoped gate
+- New `requireBusinessAdminSlug` prop. Super admins bypass the check; otherwise the route matches `:slug` against `profile.businesses` and renders `AccessDenied` if the signed-in user is not an admin of that business.
+
+#### `frontend/src/pages/auth/LoginPage.tsx` — role-aware redirect
+- Super admins → `/dashboard`.
+- Business admins (with at least one `business_members` row) → `/b/<first-business-slug>/admin`.
+- Everyone else → previous route or `/`.
 
 > [!TIP]
 > **Design Guidelines for Dashboard:**
@@ -1136,16 +1208,19 @@ class BusinessResponse(BaseModel):
 ### ✅ Phase 4 Testing Checklist
 
 #### Manual Tests:
-- [ ] Login as super admin → Dashboard loads with empty state
-- [ ] Click "Create Business" → form renders with all fields
-- [ ] Fill form and submit → business created, appears in dashboard
-- [ ] Create 3 businesses with different industries → all appear in grid
-- [ ] Click "Edit" on a business → edit modal shows current values
-- [ ] Update business name → change reflected immediately
-- [ ] Click "Delete" → confirmation dialog shows → confirm → business disappears
-- [ ] Verify in Supabase: business row has `is_active = FALSE` (soft delete)
-- [ ] Stats bar shows correct counts
-- [ ] Non-super-admin user accessing `/dashboard` → "Access Denied" page
+- [x] Login as super admin → Dashboard loads with empty state
+- [x] Click "Create Business" → form renders with all fields (incl. "Assign a dedicated Business Admin" toggle)
+- [x] Fill form **without** admin → business created with no members → super admin can add them later from the Admins modal
+- [x] Fill form **with** `admin_email` → business created + one-time credentials shown → the new admin can sign in and lands on `/b/<slug>/admin`
+- [x] Using the Admins modal, invite another admin by email → they can also sign in and see the same business
+- [x] Business admin signs in → redirected to their business's `/b/<slug>/admin` → can edit settings, cannot access `/dashboard` or another tenant's `/b/<slug>/admin`
+- [x] Create 3 businesses with different industries → all appear in grid
+- [x] Click "Edit" on a business → edit modal shows current values
+- [x] Update business name → change reflected immediately
+- [x] Click "Deactivate" → confirmation dialog shows → confirm → business flagged inactive
+- [x] Verify in Supabase: business row has `is_active = FALSE` (soft delete)
+- [x] Stats bar shows correct counts
+- [x] Non-super-admin user accessing `/dashboard` → "Access Denied" page
 
 ### 🔒 Git Backup
 ```bash
@@ -1292,17 +1367,25 @@ git add -A && git commit -m "Phase 5: RAG engine core - llm_router, chunker, ing
 ## Objective
 Build the knowledge base management system — upload PDFs, scrape URLs, view/edit/delete chunks — for business admins.
 
+> [!IMPORTANT]
+> **Routing decision (supersedes the original `/api/knowledge/{business_id}/…` prefix).** All tenant-scoped admin endpoints now live under a single **`/api/business/{business_id}/…`** prefix so they share `require_business_admin(business_id)` with the Phase 4 settings router. See [PLAN.md §1](PLAN.md) "Tenant routing & API conventions". `app/api/knowledge.py` still exists as its own module for code organisation, but its `APIRouter` uses `prefix="/api/business"` and tags knowledge endpoints with `["Business Knowledge"]`.
+>
+> When `businesses.is_active = FALSE`, ingestion writes (upload / scrape / edit) should return HTTP 409 `business_inactive`; reads continue to work so the Business Admin can inspect what they already have.
+>
+> The frontend should resolve slug → business via the shared `useBusinessBySlug(slug)` hook (which calls `GET /api/business/by-slug/{slug}`) instead of looking up `profile.businesses` — the latter does not contain businesses owned by other admins even for super admins inspecting a tenant.
+
 ### Task 6.1: Create `backend/app/api/knowledge.py`
-Endpoints (require business admin role):
-- `POST /api/knowledge/{business_id}/upload` — Upload PDF/TXT file → ingest
-- `POST /api/knowledge/{business_id}/scrape` — Scrape URL → ingest
-- `GET /api/knowledge/{business_id}/chunks` — List chunks with pagination, filtering, search
-- `GET /api/knowledge/{business_id}/chunks/{chunk_id}` — Get single chunk
-- `PUT /api/knowledge/{business_id}/chunks/{chunk_id}` — Edit chunk content (re-embed)
-- `DELETE /api/knowledge/{business_id}/chunks/{chunk_id}` — Delete single chunk
-- `DELETE /api/knowledge/{business_id}/chunks/batch` — Delete chunks by source URL (batch)
-- `GET /api/knowledge/{business_id}/sources` — List unique sources (grouped by URL/title)
-- `GET /api/knowledge/{business_id}/stats` — Knowledge base stats (total chunks, by type, storage)
+Endpoints (all require business admin role via `require_business_admin(business_id)`):
+- `POST   /api/business/{business_id}/knowledge/upload`              — Upload PDF/TXT file → queue ingest; returns `task_id`
+- `POST   /api/business/{business_id}/knowledge/scrape`              — Scrape URL → queue ingest; returns `task_id`
+- `GET    /api/business/{business_id}/knowledge/tasks/{task_id}`     — Poll ingestion task status
+- `GET    /api/business/{business_id}/knowledge/chunks`              — List chunks with pagination, filtering, search
+- `GET    /api/business/{business_id}/knowledge/chunks/{chunk_id}`   — Get single chunk
+- `PUT    /api/business/{business_id}/knowledge/chunks/{chunk_id}`   — Edit chunk content (re-embed)
+- `DELETE /api/business/{business_id}/knowledge/chunks/{chunk_id}`   — Delete single chunk
+- `DELETE /api/business/{business_id}/knowledge/chunks/batch`        — Delete chunks by source URL (batch)
+- `GET    /api/business/{business_id}/knowledge/sources`             — List unique sources (grouped by URL/title)
+- `GET    /api/business/{business_id}/knowledge/stats`               — KB stats (total chunks, by type, storage)
 
 ### Task 6.2: File Upload Flow (Backend)
 ```
@@ -1368,30 +1451,43 @@ git add -A && git commit -m "Phase 6: Knowledge base management (upload, scrape,
 # PHASE 7: BUSINESS ADMIN DASHBOARD
 # ============================================================
 
+> [!NOTE]
+> **Scope pulled forward from Phase 4.** The Business Admin *settings* slice (profile + chat settings + brand color + max chunks + confidence threshold) and the `/api/business/{id}` GET/PUT endpoints were implemented during Phase 4 alongside the ownership-model work, because a Business Admin logging in needs *something* to manage. This phase still needs to: split the current single-page `BusinessAdminDashboard.tsx` into a multi-section layout, and add admin chat / alerts / analytics / logo upload / danger zone.
+
 ## Objective
 Build the complete Business Admin Dashboard with sidebar navigation, mirroring all features from the reference project's admin_ui.py but enhanced for multi-tenant.
 
-### Task 7.1: Create `backend/app/api/business_admin.py`
-Endpoints:
-- `GET /api/business/{business_id}` — Get business details + stats
-- `PUT /api/business/{business_id}/settings` — Update business settings
-- `GET /api/business/{business_id}/analytics` — Dashboard analytics (query volume, confidence distribution, top queries, API cost estimate)
-- `GET /api/business/{business_id}/chat-logs` — Chat history with pagination + filters
-- `GET /api/business/{business_id}/failed-queries` — Failed/low-confidence queries
-- `POST /api/business/{business_id}/alerts` — Create emergency alert
-- `GET /api/business/{business_id}/alerts` — List alerts
-- `DELETE /api/business/{business_id}/alerts/{alert_id}` — Remove alert
-- `DELETE /api/business/{business_id}/cache` — Purge response cache
+### Task 7.1: Extend `backend/app/api/business_admin.py`
+
+> [!IMPORTANT]
+> **Already shipped during Phase 4** and should **not** be re-implemented:
+> - `GET  /api/business/{business_id}` — business detail
+> - `GET  /api/business/by-slug/{slug}` — detail by slug (used by `useBusinessBySlug`)
+> - `PUT  /api/business/{business_id}` — unified profile + settings update (deep-merged; `is_active` stripped — only the super admin may deactivate)
+>
+> **Do not add a separate `PUT /api/business/{business_id}/settings`**; the unified PUT already accepts `{name, description, industry, logo_url, settings}` and deep-merges with `DEFAULT_BUSINESS_SETTINGS`.
+
+Remaining Phase 7 endpoints to add (all gated by `require_business_admin`):
+- `GET    /api/business/{business_id}/analytics`            — query volume, confidence distribution, top queries, API cost estimate
+- `GET    /api/business/{business_id}/chat-logs`            — chat history with pagination + filters
+- `GET    /api/business/{business_id}/failed-queries`       — failed/low-confidence queries
+- `POST   /api/business/{business_id}/alerts`               — create emergency alert
+- `GET    /api/business/{business_id}/alerts`               — list alerts
+- `DELETE /api/business/{business_id}/alerts/{alert_id}`    — remove alert
+- `DELETE /api/business/{business_id}/cache`                — purge response cache
 
 ### Task 7.2: Create Business Admin Layout
-`frontend/src/pages/business-admin/BusinessAdminLayout.jsx`:
-- Sidebar with business name + logo at top
-- Navigation sections:
-  1. 💬 **Chat (Admin Test)** — Test the RAG as a user would
-  2. 📚 **Knowledge Base** — Upload, manage chunks (from Phase 6)
-  3. 🚨 **Emergency Alerts** — Broadcast alerts (from reference)
-  4. 📊 **Analytics & QC** — Dashboard analytics (from reference)
-  5. ⚙️ **Settings** — Business configuration
+
+`frontend/src/pages/business-admin/BusinessAdminLayout.tsx` (may already exist from Phase 6):
+- Route: `/b/:slug/admin/*` with an `<Outlet />` (convert the current single-page route in `App.tsx`)
+- Sub-routes (children of the layout):
+  - `index` → Settings page (the already-shipped settings slice, renamed to `SettingsPage.tsx`)
+  - `knowledge` → `KnowledgeBasePage` (Phase 6)
+  - `chat` → `AdminChatPage`
+  - `alerts` → `AlertsPage`
+  - `analytics` → `AnalyticsPage`
+- Sidebar with business name + logo at top; navigate via NavLinks to the 5 sections.
+- All sub-pages receive `businessId` via the shared `useBusinessBySlug(slug)` hook — **do not** derive it from `profile.businesses` (that lookup fails for super admins inspecting tenants they don't belong to).
 
 ### Task 7.3: Admin Chat Test Page
 `frontend/src/pages/business-admin/AdminChatPage.jsx`:
@@ -1469,6 +1565,12 @@ git add -A && git commit -m "Phase 7: Business Admin Dashboard (chat test, alert
 Build the public-facing chat interface where end users interact with the business's RAG chatbot. This is the equivalent of the reference project's `chat_ui.py` — but as a full React SPA with streaming responses.
 
 ### Task 8.1: Create `backend/app/api/chat.py`
+
+> [!IMPORTANT]
+> **`is_active` gating.** The chat portal is the only caller that should **404** when `businesses.is_active = FALSE`. Load the business row (including `is_active`) at the start of every chat endpoint (`/info`, `/alerts`, `/message`, `/stream`, `/conversations*`) and short-circuit with `{"error":{"code":"business_inactive","message":"This chatbot is currently unavailable."}}` when it isn't. Admin endpoints (`/api/super-admin/*`, `/api/business/*`) continue to work on inactive businesses so both roles can still see settings / data.
+>
+> **Public surface.** These endpoints are *anonymous-friendly*: `get_optional_user` for auth (not `get_current_user`), resolve the tenant via `slug`, and only require a JWT when `businesses.settings.user_login_required = TRUE`.
+
 Endpoints:
 - `POST /api/chat/{business_slug}/message` — Send a message, get RAG response
   - Accept: `{ message: str, conversation_id?: str, session_id?: str }`
@@ -1582,28 +1684,34 @@ End-to-end testing of the complete flow from business creation to user chat. Fix
 
 ### Task 9.1: Full Integration Test Scenario
 
-Execute this test script manually:
+Execute this test script manually. The scenario explicitly exercises the **per-business-admin** ownership model introduced in Phase 4.
 
-1. **Login as Super Admin** → Dashboard loads
-2. **Create Business:** "Sydney Burgers" (industry: Restaurant)
-3. **Navigate to Business Admin:** `/b/sydney-burgers/admin`
-4. **Upload Knowledge:**
+1. **Login as Super Admin** → `/dashboard` loads
+2. **Create Business:** "Sydney Burgers" (industry: Restaurant) **with** `admin_email = owner-sb@example.com` and **Generate password** ticked → copy the one-time credentials that are revealed after creation
+3. **Sign out → sign in as `owner-sb@example.com`** → should auto-redirect to `/b/sydney-burgers/admin` (Business Admin workspace)
+4. **(As Business Admin) Upload Knowledge:**
    - Upload a PDF (any test PDF with content)
    - Scrape a URL (any public restaurant menu page)
-   - Verify chunks appear in Knowledge Base explorer
-5. **Test Admin Chat:**
-   - Ask: "What items are on the menu?" → should get relevant answer
+   - Verify chunks appear in the Knowledge Base explorer
+5. **(As Business Admin) Test Admin Chat:**
+   - Ask: "What items are on the menu?" → should get a relevant answer
    - Check confidence score is reasonable
-6. **Create Emergency Alert:** "We are closed today due to renovations"
-7. **Test User Portal:** Open `/b/sydney-burgers` in incognito window
+6. **(As Business Admin) Create Emergency Alert:** "We are closed today due to renovations"
+7. **Test User Portal (incognito):** Open `/b/sydney-burgers`
+   - Alert banner is visible
    - Ask: "Are you open today?" → should mention the emergency alert
-   - Ask: "What's on the menu?" → should use knowledge base
-   - Verify sources are cited
-8. **Check Analytics:** Go back to admin → analytics shows the queries
-9. **Test another business:**
-   - Create "UTS University" (industry: Education)
-   - Upload different knowledge
-   - Verify data isolation: UTS chat doesn't return Sydney Burgers content
+   - Ask: "What's on the menu?" → should use the knowledge base; sources cited
+8. **(As Business Admin) Check Analytics:** back in `/b/sydney-burgers/admin/analytics` the queries from step 7 appear
+9. **Tenant isolation (most important):**
+   - Sign back in as **super admin** → create "UTS University" (industry: Education) with a **different** `admin_email = owner-uts@example.com`
+   - Sign in as `owner-uts@example.com` → can only see UTS. Navigating to `/b/sydney-burgers/admin` shows "Access denied"; `GET /api/business/{sydney-id}` returns 403
+   - Sign in as `owner-sb@example.com` → symmetric: no access to `/b/uts/admin`
+   - From incognito UTS chat portal, asking Sydney-Burgers questions returns no relevant sources (RAG isolation)
+10. **Super admin inspection:** as super admin, visit `/b/sydney-burgers/admin` directly → page loads via `GET /api/business/by-slug/sydney-burgers` (no membership row required)
+11. **Soft deactivate:** as super admin, `DELETE` Sydney Burgers
+    - `/b/sydney-burgers` chat portal returns 404 / "unavailable" banner
+    - `owner-sb@example.com` can still sign in but any KB write returns 409 `business_inactive`
+    - Super admin can still read the business in the dashboard and re-activate by `PUT is_active=true`
 
 ### Task 9.2: Bug Fix Checklist
 - [ ] No CORS errors in browser console

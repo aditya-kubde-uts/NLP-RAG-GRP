@@ -1,4 +1,4 @@
-import { Building2, Database, MessageSquare, Pencil, Trash2, Users } from "lucide-react";
+import { Building2, Database, MessageSquare, Pencil, Shield, Trash2, Users } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -6,7 +6,12 @@ import { toast } from "sonner";
 
 import { useAuth } from "@/context/use-auth";
 import { ApiError, apiJson } from "@/lib/api";
-import type { BusinessRow, PlatformStats } from "@/types/super-admin";
+import type {
+  AdminCredentials,
+  BusinessAdminSummary,
+  BusinessRow,
+  PlatformStats,
+} from "@/types/super-admin";
 
 const INDUSTRIES = [
   "Education",
@@ -32,6 +37,7 @@ export default function DashboardPage() {
   const [businesses, setBusinesses] = useState<BusinessRow[]>([]);
   const [editing, setEditing] = useState<BusinessRow | null>(null);
   const [editSaving, setEditSaving] = useState(false);
+  const [managingAdmins, setManagingAdmins] = useState<BusinessRow | null>(null);
 
   const totalChunks = useMemo(
     () => businesses.reduce((sum, b) => sum + b.chunk_count, 0),
@@ -235,6 +241,14 @@ export default function DashboardPage() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => setManagingAdmins(b)}
+                    className="inline-flex items-center gap-1 rounded-md border border-white/15 px-3 py-1.5 text-xs font-medium text-white/80 transition hover:border-indigo-400/50 hover:text-white"
+                  >
+                    <Shield className="h-3.5 w-3.5" />
+                    Admins
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => void onDelete(b)}
                     disabled={!b.is_active}
                     className="inline-flex items-center gap-1 rounded-md border border-red-500/30 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
@@ -248,6 +262,17 @@ export default function DashboardPage() {
           </div>
         )}
       </section>
+
+      {managingAdmins ? (
+        <AdminsModal
+          business={managingAdmins}
+          token={token}
+          onClose={() => {
+            setManagingAdmins(null);
+            void load();
+          }}
+        />
+      ) : null}
 
       {editing ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
@@ -332,6 +357,252 @@ function StatCard({
         <p className="mt-3 text-xs uppercase tracking-wide text-white/40">{label}</p>
         <p className="mt-1 text-2xl font-semibold tabular-nums text-white">{value}</p>
         {hint ? <p className="mt-1 text-xs text-white/40">{hint}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function AdminsModal({
+  business,
+  token,
+  onClose,
+}: {
+  business: BusinessRow;
+  token: string | undefined;
+  onClose: () => void;
+}) {
+  const [admins, setAdmins] = useState<BusinessAdminSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [password, setPassword] = useState("");
+  const [inviting, setInviting] = useState(false);
+  const [credsReveal, setCredsReveal] = useState<AdminCredentials | null>(null);
+
+  const load = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const list = await apiJson<BusinessAdminSummary[]>(
+        `/api/super-admin/businesses/${business.id}/admins`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      setAdmins(list);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Failed to load admins.");
+    } finally {
+      setLoading(false);
+    }
+  }, [business.id, token]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch-on-mount
+    void load();
+  }, [load]);
+
+  async function invite(e: React.FormEvent) {
+    e.preventDefault();
+    if (!token) return;
+    setInviting(true);
+    try {
+      const body: Record<string, unknown> = { email: email.trim().toLowerCase() };
+      if (fullName.trim()) body.full_name = fullName.trim();
+      if (password) body.password = password;
+      const res = await apiJson<AdminCredentials>(
+        `/api/super-admin/businesses/${business.id}/admins`,
+        { method: "POST", headers: { Authorization: `Bearer ${token}` }, json: body },
+      );
+      toast.success(res.was_created ? "Admin created." : "Admin attached.");
+      setEmail("");
+      setFullName("");
+      setPassword("");
+      if (res.was_created) {
+        setCredsReveal(res);
+      }
+      void load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Invite failed.");
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  async function remove(userId: string) {
+    if (!token) return;
+    const ok = window.confirm("Remove this admin from the business?");
+    if (!ok) return;
+    try {
+      await apiJson(`/api/super-admin/businesses/${business.id}/members/${userId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast.success("Admin removed.");
+      void load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Remove failed.");
+    }
+  }
+
+  async function copy(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copied.");
+    } catch {
+      toast.error("Copy failed.");
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[90vh] w-full max-w-xl flex-col rounded-xl border border-white/10 bg-[#12122a] shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-white/10 p-6">
+          <div>
+            <h3 className="text-lg font-semibold text-white">Business admins</h3>
+            <p className="mt-1 text-sm text-white/55">
+              {business.name}{" "}
+              <span className="font-mono text-xs text-white/40">/b/{business.slug}</span>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-white/15 px-3 py-1 text-xs text-white/70 hover:bg-white/10"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          <section>
+            <h4 className="text-xs font-medium uppercase tracking-wide text-white/50">
+              Current admins
+            </h4>
+            {loading ? (
+              <p className="mt-3 text-sm text-white/50">Loading…</p>
+            ) : admins.length === 0 ? (
+              <p className="mt-3 text-sm text-white/50">No admins yet.</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {admins.map((a) => (
+                  <li
+                    key={a.user_id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm text-white">
+                        {a.full_name || a.email || a.user_id}
+                      </p>
+                      <p className="truncate text-xs text-white/50">
+                        {a.email ? <span className="font-mono">{a.email}</span> : null}{" "}
+                        <span className="ml-2 rounded-full bg-indigo-500/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-indigo-200">
+                          {a.role}
+                        </span>
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void remove(a.user_id)}
+                      className="rounded-md border border-red-500/30 px-3 py-1 text-xs text-red-300 hover:bg-red-500/10"
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="mt-8">
+            <h4 className="text-xs font-medium uppercase tracking-wide text-white/50">
+              Invite admin by email
+            </h4>
+            <form className="mt-3 space-y-3" onSubmit={invite}>
+              <input
+                required
+                type="email"
+                placeholder="owner@company.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
+              />
+              <input
+                placeholder="Full name (optional)"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
+              />
+              <input
+                type="text"
+                autoComplete="off"
+                placeholder="Password (optional — generated if blank)"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                minLength={password ? 8 : undefined}
+                className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-sm text-white outline-none focus:border-indigo-500"
+              />
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={inviting}
+                  className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-400 disabled:opacity-50"
+                >
+                  {inviting ? "Inviting…" : "Invite"}
+                </button>
+              </div>
+            </form>
+            <p className="mt-2 text-xs text-white/45">
+              If the email already has an account, it is just attached to this business.
+            </p>
+          </section>
+
+          {credsReveal ? (
+            <section className="mt-8 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4">
+              <p className="text-sm font-medium text-white">One-time credentials</p>
+              <p className="mt-1 text-xs text-white/55">
+                Share these now — they will not be shown again.
+              </p>
+              <dl className="mt-3 space-y-2 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <dt className="text-xs uppercase text-white/40">Email</dt>
+                    <dd className="mt-1 font-mono text-white">{credsReveal.email}</dd>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void copy(credsReveal.email)}
+                    className="rounded-md border border-white/15 px-3 py-1 text-xs hover:bg-white/10"
+                  >
+                    Copy
+                  </button>
+                </div>
+                {credsReveal.password ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <dt className="text-xs uppercase text-white/40">Password</dt>
+                      <dd className="mt-1 font-mono text-white">{credsReveal.password}</dd>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void copy(credsReveal.password ?? "")}
+                      className="rounded-md border border-white/15 px-3 py-1 text-xs hover:bg-white/10"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                ) : null}
+              </dl>
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setCredsReveal(null)}
+                  className="rounded-md border border-white/15 px-3 py-1 text-xs hover:bg-white/10"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </section>
+          ) : null}
+        </div>
       </div>
     </div>
   );
