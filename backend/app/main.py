@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.api.auth import router as auth_router
 from app.config import get_settings
 from app.errors import api_error
 from app.logging import configure_logging, get_logger
@@ -96,7 +97,10 @@ def create_app() -> FastAPI:
     async def health_db() -> dict[str, Any]:
         """Cheap DB connectivity check (``SELECT 1`` via ``DATABASE_URL``)."""
         try:
-            with psycopg.connect(settings.database_url, connect_timeout=5) as conn, conn.cursor() as cur:
+            with (
+                psycopg.connect(settings.database_url, connect_timeout=5) as conn,
+                conn.cursor() as cur,
+            ):
                 cur.execute("SELECT 1")
                 cur.fetchone()
             return {"status": "healthy", "database": "reachable"}
@@ -108,6 +112,8 @@ def create_app() -> FastAPI:
                 message="Cannot reach Postgres with DATABASE_URL.",
                 details={"reason": str(exc)},
             ) from exc
+
+    application.include_router(auth_router)
 
     return application
 
