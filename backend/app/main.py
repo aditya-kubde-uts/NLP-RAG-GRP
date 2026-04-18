@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.auth import router as auth_router
+from app.api.super_admin import router as super_admin_router
 from app.config import get_settings
 from app.errors import api_error
 from app.logging import configure_logging, get_logger
@@ -114,6 +115,7 @@ def create_app() -> FastAPI:
             ) from exc
 
     application.include_router(auth_router)
+    application.include_router(super_admin_router)
 
     return application
 

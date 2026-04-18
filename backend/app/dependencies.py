@@ -48,7 +48,7 @@ async def require_super_admin(user: Any = Depends(get_current_user)) -> Any:
             supabase_admin.table("user_profiles")
             .select("is_super_admin")
             .eq("id", uid)
-            .single()
+            .limit(1)
             .execute()
         )
     except Exception as exc:
@@ -59,7 +59,8 @@ async def require_super_admin(user: Any = Depends(get_current_user)) -> Any:
             details={"reason": str(exc)},
         ) from exc
 
-    if not profile.data or not profile.data.get("is_super_admin"):
+    rows = getattr(profile, "data", None) or []
+    if not rows or not rows[0].get("is_super_admin"):
         raise api_error(403, code="forbidden", message="Super admin access required.")
 
     return user

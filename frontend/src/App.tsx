@@ -1,12 +1,14 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { ProtectedRoute } from "@/components/common/ProtectedRoute";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 import LoginPage from "@/pages/auth/LoginPage";
 import SignupPage from "@/pages/auth/SignupPage";
 import BusinessAdminDashboard from "@/pages/business-admin/BusinessAdminDashboard";
 import ChatPortal from "@/pages/chat/ChatPortal";
 import HomePage from "@/pages/HomePage";
-import SuperAdminDashboard from "@/pages/super-admin/SuperAdminDashboard";
+import CreateBusinessPage from "@/pages/super-admin/CreateBusinessPage";
+import DashboardPage from "@/pages/super-admin/DashboardPage";
 
 export default function App() {
   return (
@@ -18,10 +20,13 @@ export default function App() {
         path="/dashboard"
         element={
           <ProtectedRoute requireSuperAdmin>
-            <SuperAdminDashboard />
+            <DashboardLayout />
           </ProtectedRoute>
         }
-      />
+      >
+        <Route index element={<DashboardPage />} />
+        <Route path="businesses/new" element={<CreateBusinessPage />} />
+      </Route>
       <Route
         path="/b/:slug/admin"
         element={
