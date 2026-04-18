@@ -5,6 +5,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import LoginPage from "@/pages/auth/LoginPage";
 import SignupPage from "@/pages/auth/SignupPage";
 import BusinessAdminDashboard from "@/pages/business-admin/BusinessAdminDashboard";
+import KnowledgeBasePage from "@/pages/business-admin/KnowledgeBasePage";
 import ChatPortal from "@/pages/chat/ChatPortal";
 import HomePage from "@/pages/HomePage";
 import CreateBusinessPage from "@/pages/super-admin/CreateBusinessPage";
@@ -32,6 +33,14 @@ export default function App() {
         element={
           <ProtectedRoute requireBusinessAdminSlug>
             <BusinessAdminDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/b/:slug/admin/knowledge"
+        element={
+          <ProtectedRoute requireBusinessAdminSlug>
+            <KnowledgeBasePage />
           </ProtectedRoute>
         }
       />

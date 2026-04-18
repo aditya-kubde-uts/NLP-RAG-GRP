@@ -6,6 +6,7 @@ from typing import Any
 
 import psycopg
 from pgvector.psycopg import register_vector
+from psycopg.types.json import Jsonb
 
 from app.config import get_settings
 from app.core.llm_router import aget_embedding
@@ -62,7 +63,7 @@ async def ingest_chunks(
                         "source_url": source_url,
                         "source_type": source_type,
                         "llm_summary": chunk.get("llm_summary"),
-                        "metadata": chunk.get("metadata") or {},
+                        "metadata": Jsonb(chunk.get("metadata") or {}),
                         "content_hash": chunk.get("content_hash"),
                     },
                 )

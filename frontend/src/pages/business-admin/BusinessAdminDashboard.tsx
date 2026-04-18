@@ -107,6 +107,11 @@ export default function BusinessAdminDashboard() {
             <Link to={chatUrl} className="text-indigo-300 hover:underline">
               Chat portal ↗
             </Link>
+            {detail ? (
+              <Link to={`/b/${detail.slug}/admin/knowledge`} className="text-indigo-300 hover:underline">
+                Knowledge base
+              </Link>
+            ) : null}
             {profile?.is_super_admin ? (
               <Link to="/dashboard" className="text-white/70 hover:underline">
                 Super admin
