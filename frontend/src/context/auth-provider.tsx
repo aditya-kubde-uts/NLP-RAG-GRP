@@ -1,58 +1,17 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
-import type { Session, User } from "@supabase/supabase-js";
 import { useNavigate } from "react-router-dom";
+
+import { AuthStateContext } from "./auth-state-context";
+import type { AuthContextValue, LoginApiResponse, SignupApiResponse, UserProfile } from "./auth-types";
 
 import { apiJson } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
-
-export type UserProfile = {
-  id: string;
-  email: string;
-  full_name: string | null;
-  is_super_admin: boolean;
-  businesses: { id: string; name: string; slug: string; role: string }[];
-};
-
-type LoginApiResponse = {
-  session: {
-    access_token: string;
-    refresh_token: string;
-    expires_in: number;
-    token_type: string;
-  };
-  user: UserProfile;
-};
-
-type SignupApiResponse = {
-  user: UserProfile;
-  session: LoginApiResponse["session"] | null;
-  message: string | null;
-};
-
-type AuthContextValue = {
-  session: Session | null;
-  user: User | null;
-  profile: UserProfile | null;
-  loading: boolean;
-  signIn: (email: string, password: string) => Promise<UserProfile | null>;
-  signUp: (
-    email: string,
-    password: string,
-    fullName: string,
-  ) => Promise<{ message?: string; user?: UserProfile | null }>;
-  signOut: () => Promise<void>;
-  refreshProfile: () => Promise<void>;
-};
-
-const AuthContext = createContext<AuthContextValue | null>(null);
 
 async function fetchProfile(accessToken: string): Promise<UserProfile | null> {
   try {
@@ -66,7 +25,7 @@ async function fetchProfile(accessToken: string): Promise<UserProfile | null> {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<AuthContextValue["session"]>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -183,13 +142,5 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [session, profile, loading, signIn, signUp, signOut, refreshProfile],
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error("useAuth must be used within AuthProvider");
-  }
-  return ctx;
+  return <AuthStateContext.Provider value={value}>{children}</AuthStateContext.Provider>;
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/context/use-auth";
 import { cn } from "@/lib/utils";
 
 export default function HomePage() {
@@ -68,7 +68,7 @@ export default function HomePage() {
         <section className="grid gap-4 sm:grid-cols-2">
           <Card title="Backend" value="FastAPI + Supabase Auth" />
           <Card title="Frontend" value="React + Vite + TS" />
-          <Card title="Auth" value="/api/auth/* + AuthContext" />
+          <Card title="Auth" value="/api/auth/* + AuthProvider" />
           <Card title="DB" value="Supabase + pgvector" />
         </section>
 

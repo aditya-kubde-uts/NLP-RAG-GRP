@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { ApiError } from "@/lib/api";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/context/use-auth";
 
 export default function LoginPage() {
   const { signIn } = useAuth();
