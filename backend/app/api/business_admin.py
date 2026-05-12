@@ -229,13 +229,24 @@ def get_chat_logs(
     _user: BusinessAdminUser,
     limit: int = 20,
     offset: int = 0,
+    role: str | None = None,
+    is_failed: bool | None = None,
 ):
     try:
-        resp = (
+        query = (
             supabase_admin.table("chat_messages")
             .select("*")
             .eq("business_id", str(business_id))
-            .order("created_at", desc=True)
+        )
+
+        if role:
+            query = query.eq("role", role)
+
+        if is_failed is not None:
+            query = query.eq("is_failed", is_failed)
+
+        resp = (
+            query.order("created_at", desc=True)
             .range(offset, offset + limit - 1)
             .execute()
         )
