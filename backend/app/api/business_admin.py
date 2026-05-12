@@ -220,3 +220,32 @@ def update_business_settings(
         ) from exc
 
     return get_business_detail(business_id, _user)
+
+
+
+@router.get("/{business_id}/chat-logs")
+def get_chat_logs(
+    business_id: UUID,
+    _user: BusinessAdminUser,
+    limit: int = 20,
+    offset: int = 0,
+):
+    try:
+        resp = (
+            supabase_admin.table("chat_messages")
+            .select("*")
+            .eq("business_id", str(business_id))
+            .order("created_at", desc=True)
+            .range(offset, offset + limit - 1)
+            .execute()
+        )
+
+        return resp.data
+
+    except Exception as exc:
+        raise api_error(
+            500,
+            code="database_error",
+            message="Could not load chat logs.",
+            details={"reason": str(exc)},
+        ) from exc
