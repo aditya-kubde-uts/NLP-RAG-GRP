@@ -260,3 +260,32 @@ def get_chat_logs(
             message="Could not load chat logs.",
             details={"reason": str(exc)},
         ) from exc
+
+
+@router.get("/{business_id}/failed-queries")
+def get_failed_queries(
+    business_id: UUID,
+    _user: BusinessAdminUser,
+    limit: int = 20,
+    offset: int = 0,
+):
+    try:
+        resp = (
+            supabase_admin.table("chat_messages")
+            .select("*")
+            .eq("business_id", str(business_id))
+            .eq("is_failed", True)
+            .order("created_at", desc=True)
+            .range(offset, offset + limit - 1)
+            .execute()
+        )
+
+        return resp.data
+
+    except Exception as exc:
+        raise api_error(
+            500,
+            code="database_error",
+            message="Could not load failed queries.",
+            details={"reason": str(exc)},
+        ) from exc
