@@ -330,10 +330,32 @@ def get_business_analytics(
 
         estimated_cost = total_tokens * 0.000002
 
+        confidence_distribution = {
+            "high": len([r for r in rows if (r.get("confidence") or 0) >= 0.8]),
+            "medium": len([r for r in rows if 0.5 <= (r.get("confidence") or 0) < 0.8]),
+            "low": len([r for r in rows if (r.get("confidence") or 0) < 0.5]),
+        }
+
+        query_counts = {}
+
+        for row in rows:
+            content = row.get("content")
+
+            if content:
+                query_counts[content] = query_counts.get(content, 0) + 1
+
+        top_queries = sorted(
+            query_counts.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )[:5]
+
         return {
             "query_volume": total_queries,
             "failed_queries": failed_queries,
             "average_confidence": avg_confidence,
+            "confidence_distribution": confidence_distribution,
+            "top_queries": top_queries,
             "total_tokens": total_tokens,
             "estimated_cost": estimated_cost,
         }
