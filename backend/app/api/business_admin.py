@@ -289,3 +289,59 @@ def get_failed_queries(
             message="Could not load failed queries.",
             details={"reason": str(exc)},
         ) from exc
+
+@router.get("/{business_id}/analytics")
+def get_business_analytics(
+    business_id: UUID,
+    _user: BusinessAdminUser,
+):
+    try:
+        resp = (
+            supabase_admin.table("chat_messages")
+            .select("*")
+            .eq("business_id", str(business_id))
+            .execute()
+        )
+
+        rows = resp.data or []
+
+        total_queries = len(rows)
+
+        failed_queries = len(
+            [r for r in rows if r.get("is_failed")]
+        )
+
+        confidences = [
+            r.get("confidence")
+            for r in rows
+            if r.get("confidence") is not None
+        ]
+
+        avg_confidence = (
+            sum(confidences) / len(confidences)
+            if confidences
+            else 0
+        )
+
+        total_tokens = sum(
+            r.get("token_count") or 0
+            for r in rows
+        )
+
+        estimated_cost = total_tokens * 0.000002
+
+        return {
+            "query_volume": total_queries,
+            "failed_queries": failed_queries,
+            "average_confidence": avg_confidence,
+            "total_tokens": total_tokens,
+            "estimated_cost": estimated_cost,
+        }
+
+    except Exception as exc:
+        raise api_error(
+            500,
+            code="database_error",
+            message="Could not load analytics.",
+            details={"reason": str(exc)},
+        ) from exc
