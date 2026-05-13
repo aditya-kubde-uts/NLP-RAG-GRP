@@ -402,16 +402,16 @@ def create_alert(
     body: dict[str, Any],
     user: BusinessAdminUser,
 ):
+    content = body.get("content")
+
+    if not content:
+        raise api_error(
+            400,
+            code="invalid_request",
+            message="Alert content is required.",
+        )
+
     try:
-        content = body.get("content")
-
-        if not content:
-            raise api_error(
-                400,
-                code="invalid_request",
-                message="Alert content is required.",
-            )
-
         resp = (
             supabase_admin.table("alerts")
             .insert({
@@ -431,7 +431,6 @@ def create_alert(
             message="Could not create alert.",
             details={"reason": str(exc)},
         ) from exc
-
 
 
 @router.delete("/{business_id}/alerts/{alert_id}")
