@@ -367,3 +367,92 @@ def get_business_analytics(
             message="Could not load analytics.",
             details={"reason": str(exc)},
         ) from exc
+
+
+@router.get("/{business_id}/alerts")
+def get_alerts(
+    business_id: UUID,
+    _user: BusinessAdminUser,
+):
+    try:
+        resp = (
+            supabase_admin.table("alerts")
+            .select("*")
+            .eq("business_id", str(business_id))
+            .eq("is_active", True)
+            .order("created_at", desc=True)
+            .execute()
+        )
+
+        return resp.data
+
+    except Exception as exc:
+        raise api_error(
+            500,
+            code="database_error",
+            message="Could not load alerts.",
+            details={"reason": str(exc)},
+        ) from exc
+
+
+
+@router.post("/{business_id}/alerts")
+def create_alert(
+    business_id: UUID,
+    body: dict[str, Any],
+    user: BusinessAdminUser,
+):
+    try:
+        content = body.get("content")
+
+        if not content:
+            raise api_error(
+                400,
+                code="invalid_request",
+                message="Alert content is required.",
+            )
+
+        resp = (
+            supabase_admin.table("alerts")
+            .insert({
+                "business_id": str(business_id),
+                "content": content,
+                "created_by": str(user.id),
+            })
+            .execute()
+        )
+
+        return resp.data
+
+    except Exception as exc:
+        raise api_error(
+            500,
+            code="database_error",
+            message="Could not create alert.",
+            details={"reason": str(exc)},
+        ) from exc
+
+
+
+@router.delete("/{business_id}/alerts/{alert_id}")
+def delete_alert(
+    business_id: UUID,
+    alert_id: UUID,
+    _user: BusinessAdminUser,
+):
+    try:
+        supabase_admin.table("alerts") \
+            .delete() \
+            .eq("id", str(alert_id)) \
+            .eq("business_id", str(business_id)) \
+            .execute()
+
+        return {"success": True}
+
+    except Exception as exc:
+        raise api_error(
+            500,
+            code="database_error",
+            message="Could not delete alert.",
+            details={"reason": str(exc)},
+        ) from exc
