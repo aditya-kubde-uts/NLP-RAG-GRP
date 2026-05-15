@@ -83,22 +83,52 @@ cd frontend && pnpm typecheck && pnpm lint
 
 ---
 
-## Architecture
+## Architecture Overview
 
+### Request Flow
+
+```mermaid
+flowchart LR
+  Browser[Browser SPA]
+  API[FastAPI Backend]
+  Auth[Supabase Auth]
+  PG[("Supabase Postgres<br/>pgvector + RLS")]
+  Storage[Supabase Storage]
+  Azure[Azure OpenAI<br/>embeddings + chat]
+
+  Browser -- "JWT Bearer" --> API
+  Browser -. "auth.signInWithPassword" .-> Auth
+  API -- "validate JWT" --> Auth
+  API -- "SQL + vector search" --> PG
+  API -- "signed URLs / uploads" --> Storage
+  API -- "embed + complete" --> Azure
+  Browser -. "SSE stream tokens" .-> API
 ```
-┌─────────────┐      JWT       ┌──────────────┐
-│ React SPA   │ ─────────────► │   FastAPI    │
-│ (Vite + TS) │                │   (Python)   │
-└─────────────┘                └──────┬───────┘
-                                      │
-                ┌─────────────────────┼──────────────────────┐
-                ▼                     ▼                      ▼
-          ┌──────────┐         ┌─────────────┐         ┌────────────┐
-          │ Supabase │         │  Supabase   │         │   Azure    │
-          │   Auth   │         │  Postgres   │         │   OpenAI   │
-          │  (JWT)   │         │  pgvector   │         │  embed+llm │
-          └──────────┘         │   + RLS     │         └────────────┘
-                               └─────────────┘
+
+### Multi-Tenant Isolation
+
+```mermaid
+flowchart TB
+  subgraph tenants [Tenant Isolation]
+    B1["business_id = A"]
+    B2["business_id = B"]
+    B3["business_id = C"]
+  end
+
+  subgraph tables [Shared Tables with RLS]
+    KC[knowledge_chunks]
+    CM[chat_messages]
+    AL[alerts]
+  end
+
+  RLS{{"Row-Level Security<br/>filters by business_id<br/>+ business_members role"}}
+
+  B1 --> RLS
+  B2 --> RLS
+  B3 --> RLS
+  RLS --> KC
+  RLS --> CM
+  RLS --> AL
 ```
 
 ## Project Layout
