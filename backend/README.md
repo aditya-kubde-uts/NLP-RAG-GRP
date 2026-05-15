@@ -33,8 +33,6 @@ Health checks:
 - <http://localhost:8000/api/health> — process liveness
 - <http://localhost:8000/api/health/db> — `SELECT 1` against `DATABASE_URL` (503 if DB unreachable)
 
-See [../PLAN.md](../PLAN.md) and [../STEPS.md](../STEPS.md) for the full project plan.
-
 ### Phase 2 modules
 
 | Module | Role |

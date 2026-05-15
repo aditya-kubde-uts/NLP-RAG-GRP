@@ -5,7 +5,7 @@
 
 /* ============================================================
  * Design tokens (shadcn/ui compatible, HSL via oklch fallback)
- * See PLAN.md §5 UI/UX Design System for rationale.
+ * Centralized design tokens for the app UI.
  * ============================================================ */
 :root {
   --radius: 0.5rem;

@@ -1,4 +1,4 @@
-"""Structured API error payloads (STEPS.md: no bare exceptions on the wire)."""
+"""Structured API error payloads."""
 
 from __future__ import annotations
 

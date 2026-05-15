@@ -1,8 +1,8 @@
 # RAG Factory
 
-Multi-tenant Retrieval-Augmented Generation platform. The **platform Super Admin** (you) creates isolated RAG chatbots for different businesses and assigns each one to its own **Business Admin** with dedicated credentials; each business gets its own admin workspace + user chat portal — powered by Azure OpenAI, Supabase (Postgres + pgvector), FastAPI, and React.
+Link to Access RagFactory: <https://rag.adityak.codes/>
 
-> **Status:** Phases 0–5 complete; **Phase 6** (Knowledge Base Management) is next. Migration SQL lives in `supabase/migrations/`. See [PLAN.md](PLAN.md) for the roadmap and [STEPS.md](STEPS.md) for the detailed reference.
+Multi-tenant Retrieval-Augmented Generation platform. The **platform Super Admin** (you) creates isolated RAG chatbots for different businesses and assigns each one to its own **Business Admin** with dedicated credentials; each business gets its own admin workspace + user chat portal — powered by Azure OpenAI, Supabase (Postgres + pgvector), FastAPI, and React.
 
 ---
 
@@ -101,10 +101,6 @@ cd frontend && pnpm typecheck && pnpm lint
                                └─────────────┘
 ```
 
-Full mermaid diagrams in [PLAN.md §3](PLAN.md).
-
----
-
 ## Project Layout
 
 ```
@@ -113,39 +109,24 @@ RAG-Factory/
 ├── frontend/             React + Vite + TS SPA (src/pages, src/components)
 ├── supabase/migrations/  Postgres schema (added in Phase 1)
 ├── widget/               Embeddable chat widget (added in Phase 10)
-├── PLAN.md               Execution tracker with checkboxes
-├── STEPS.md              Detailed reference guide
 └── README.md             This file
 ```
 
 ---
 
-## Progress
-
-| Phase | Description | Status |
-|---|---|---|
-| 0 | Project scaffold & environment | Done |
-| 1 | Supabase schema, pgvector, RLS | Migrations in repo — applied on dev DB |
-| 2 | Backend foundation (config, Supabase clients, deps, logging) | Done |
-| 3 | Authentication (Supabase Auth + React context + protected routes) | Done |
-| 4 | Super Admin Dashboard + **per-business admin provisioning** | Done |
-| 5 | RAG engine core (llm_router, chunker, ingestor, searcher, rag_brain) | Done |
-| 6 | Knowledge base management | Pending |
-| 7 | Business Admin Dashboard (settings page already live; KB/alerts/analytics pending) | In progress |
-| 8 | User Chat Portal | Pending |
-| 9 | Integration testing & E2E | Pending |
-| 10 | Embeddable widget | Pending |
-| 11 | UI polish & accessibility | Pending |
-| 12 | Documentation | Pending |
-
-See [PLAN.md](PLAN.md) for the granular checkbox task list.
-
----
-
-## License
-
-_To be decided._
-
 ## Contributing
 
-See [PLAN.md](PLAN.md) for the current phase plan. Each phase ends with a git commit using the format `Phase N: <description>`.
+### Team Member Contribution
+
+| Project Workflow Stage | Contribution / Work Completed | Key Deliverables | Contribution By |
+|---|---|---|---|
+| Project Setup & Planning | Designed the phased workflow for building a multi-tenant RAG platform, including environment setup, milestones, testing strategy, and deployment path. | Project scaffold, phase tracker, setup documentation, Docker/Coolify planning. | Aditya Kubde |
+| Database & Tenant Isolation | Implemented Supabase schema with pgvector, business/user relationship tables, chat logs, alerts, knowledge chunk storage. | Secure multi-tenant database foundation with vector search support. | Ashwin Raina |
+| Backend Foundation | Built FastAPI backend structure with configuration, logging, Supabase clients, authentication dependencies, error handling, and health checks. | Stable API base with readiness checks for DB, LLM, OCR, and storage. | Aditya Kubde |
+| Authentication & Access Control | Added Supabase Auth integration for Super Admin, Business Admin, and optional public users. Enforced role-based access through backend dependencies. | Login/signup flow, protected routes, tenant-aware authorization. | Ayush Onkar |
+| Super Admin Workflow | Developed Super Admin features to create businesses, assign dedicated Business Admins, manage tenants. | Business provisioning flow with one-time admin credentials and platform-level control. | Helly Ullasbhai Thakkar |
+| RAG Engine Core | Implemented the retrieval pipeline: PDF/web ingestion, text cleaning, chunking, embeddings, hybrid search, confidence thresholding, and streamed LLM responses. | Azure OpenAI + Supabase pgvector RAG engine with fallback handling. | Aditya Kubde |
+| Business Admin Workflow | Built tenant admin workspace for settings, knowledge base management, alerts, analytics, and admin-side chat testing. | Business-specific dashboard for managing chatbot behavior and knowledge sources. | Ashwin Raina |
+| Public Chat Portal & Widget | Created public chatbot interface and embeddable JavaScript widget for external websites, tenant slug routing and CORS controls. | End-user chat portal, streaming chat API, portable website widget. | Ayush Onkar |
+| Testing & Quality Assurance | Added backend unit tests, frontend unit tests, Playwright tests, accessibility checks. | Verified API behavior, UI flows, tenant isolation, widget behavior. | Helly Ullasbhai Thakkar |
+| Deployment & Documentation | Prepared Docker/Coolify deployment files and wrote setup guides for local and VPS deployment. | Deployment-ready project with clear setup and readme notes. | Aditya Kubde |

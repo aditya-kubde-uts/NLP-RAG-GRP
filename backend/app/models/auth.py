@@ -1,4 +1,4 @@
-"""Auth-related Pydantic schemas (STEPS.md Phase 3)."""
+"""Auth-related Pydantic schemas."""
 
 from __future__ import annotations
 

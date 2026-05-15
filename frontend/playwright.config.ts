@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 /**
  * Playwright config. Specs are added phase by phase (auth.spec.ts in Phase 3, etc.).
- * Runs against local dev servers. See PLAN.md §8 Testing Strategy.
+ * Runs against local dev servers.
  */
 export default defineConfig({
   testDir: "./e2e",

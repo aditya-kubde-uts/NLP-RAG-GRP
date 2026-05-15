@@ -1,4 +1,4 @@
--- Private uploads bucket for PDF / text / markdown (STEPS.md Task 1.6)
+-- Private uploads bucket for PDF / text / markdown.
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
     'uploads',

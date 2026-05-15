@@ -1,4 +1,4 @@
-"""Business schemas (STEPS.md Phase 4)."""
+"""Business schemas."""
 
 from __future__ import annotations
 
