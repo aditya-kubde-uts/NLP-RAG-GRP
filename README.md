@@ -131,19 +131,6 @@ flowchart TB
   RLS --> AL
 ```
 
-## Project Layout
-
-```
-RAG-Factory/
-├── backend/              FastAPI app (app/api, app/core, app/db, app/models)
-├── frontend/             React + Vite + TS SPA (src/pages, src/components)
-├── supabase/migrations/  Postgres schema (added in Phase 1)
-├── widget/               Embeddable chat widget (added in Phase 10)
-└── README.md             This file
-```
-
----
-
 ## Contributing
 
 ### Team Member Contribution
