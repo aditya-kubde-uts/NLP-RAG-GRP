@@ -51,7 +51,7 @@ copy .env.example .env                       # Windows; or `cp` on *nix
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-Health check: <http://localhost:8000/api/health> · Docs: <http://localhost:8000/docs>
+
 
 ### Frontend
 
@@ -63,7 +63,7 @@ copy .env.example .env
 pnpm dev
 ```
 
-App: <http://localhost:5173>
+
 
 ### Tests
 
